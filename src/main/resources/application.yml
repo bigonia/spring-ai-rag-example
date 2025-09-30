@@ -1,0 +1,100 @@
+server:
+  port: 8080 # 应用运行的端口
+
+spring:
+  application:
+    name: universal-rag-framework # 应用名称
+  main:
+    allow-bean-definition-overriding: true # 允许Bean定义覆盖
+  datasource:
+    # PostgreSQL JDBC 连接 URL
+    url: jdbc:postgresql://localhost:5432/rag_db
+    username: postgres
+    password: root
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 20000
+      maximum-pool-size: 10
+  ai:
+    openai:
+#      base-url: https://dashscope.aliyuncs.com
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+#      api-key: sk-d358b79a019c46d18fc84c1042db3042 -ds
+#      qw
+      api-key: sk-f3f3225b59f5441898aeca5124bae3f5
+      chat:
+        options:
+#          model: deepseek-chat
+          model: qwen-flash
+#        base-url: https://api.deepseek.com
+      embedding:
+        options:
+          model: text-embedding-v4
+    vectors tore:
+      pgvector:
+        # 在 DDL 脚本中创建的表名
+        table-name: document_chunks
+        # 在 DDL 脚本中创建的索引类型
+        index-type: HNSW
+        # 向量相似度计算方式，必须与 DDL 中创建索引时使用的 ops class 一致
+        # 可选值: COSINE, L2, EUCLIDEAN
+        distance-type: COSINE_DISTANCE
+        # ⭐⭐⭐ 关键配置！⭐⭐⭐
+        # 此维度必须与您选择的 Embedding 模型（见 3.1 节）的输出维度严格匹配！
+        # - OpenAI 'text-embedding-3-small'  -> 1536
+        dimensions: 1024
+        max-document-batch-size: 100
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+
+  sql:
+    init:
+      mode: always
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+# -------------------------------------------------------------------
+# Database Timeout Configuration
+# -------------------------------------------------------------------
+app:
+  database:
+    timeout:
+      # Connection timeout in seconds for establishing database connections
+      connection-timeout: 30
+      # Socket timeout in seconds for network operations
+      socket-timeout: 60
+      # Query timeout in seconds for connection test operations
+      connection-test-timeout: 10
+      # Query timeout in seconds for table metadata queries
+      metadata-query-timeout: 30
+      # Query timeout in seconds for metrics calculation queries
+      metrics-calculation-timeout: 120
+      # Overall task timeout in minutes for metadata collection tasks
+      task-timeout-minutes: 60
+      # Maximum concurrent tasks for parallel processing
+      max-concurrent-tasks: 5
+
+# -------------------------------------------------------------------
+# (可选) Logging Configuration
+# -------------------------------------------------------------------
+logging:
+  level:
+    # 设置 Spring AI 相关日志级别为 DEBUG，方便调试
+    org.springframework.ai: DEBUG
+    # 设置数据库相关日志级别，方便查看执行的 SQL
+    org.springframework.jdbc.core: DEBUG
+    # 设置项目包的日志级别为 DEBUG，启用调试日志
+    com.zwbd.dbcrawlerv4: DEBUG
+#    root: debug
+
+
+# trace
+management:
+  tracing:
+    enabled: false
+    sampling:
+      probability: 1.0
