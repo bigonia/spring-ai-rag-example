@@ -15,18 +15,59 @@ spring:
     hikari:
       connection-timeout: 20000
       maximum-pool-size: 10
+  servlet:
+    multipart:
+      max-file-size: 512MB
+      max-request-size: 1024MB
+      file-size-threshold: 100MB
   ai:
-    openai:
-#      base-url: https://dashscope.aliyuncs.com
+    # 自定义AI配置
+    qwen:
       base-url: https://dashscope.aliyuncs.com/compatible-mode
-#      api-key: sk-d358b79a019c46d18fc84c1042db3042 -ds
-#      qw
+      api-key: sk-f3f3225b59f5441898aeca5124bae3f5
+      chat:
+        model: qwen-flash
+        temperature: 0.7
+      embedding:
+        model: text-embedding-v4
+    deepseek:
+      base-url: https://api.deepseek.com
+      api-key: sk-d358b79a019c46d18fc84c1042db3042
+      chat:
+        model: deepseek-chat
+        temperature: 0.7
+    # MCP配置
+    mcp:
+      client:
+        enabled: true
+        type: sync
+        stdio:
+          connections:
+#            antv-chart:
+#              command: cmd
+#              args:
+#                - /c
+#                - npx
+#                - -y
+#                - "@antv/mcp-server-chart"
+            playwright:
+              command: cmd
+              args:
+                # 第一个参数是 /c, 告诉 cmd 执行完命令后退出
+                - /c
+                - npx
+                - "@playwright/mcp@latest"
+
+    openai:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      #      api-key: sk-d358b79a019c46d18fc84c1042db3042 -ds
+      #      qw
       api-key: sk-f3f3225b59f5441898aeca5124bae3f5
       chat:
         options:
-#          model: deepseek-chat
+          #          model: deepseek-chat
           model: qwen-flash
-#        base-url: https://api.deepseek.com
+      #        base-url: https://api.deepseek.com
       embedding:
         options:
           model: text-embedding-v4
@@ -90,6 +131,7 @@ logging:
     # 设置项目包的日志级别为 DEBUG，启用调试日志
     com.zwbd.dbcrawlerv4: DEBUG
 #    root: debug
+# org.springframework.ai.chat.client.DefaultChatClient: TRACE
 
 
 # trace
@@ -98,3 +140,8 @@ management:
     enabled: false
     sampling:
       probability: 1.0
+
+# JWT 配置
+jwt:
+  secret: "ThisIsMyVeryLongAndSecureSecretKeyForTestingPurposesOnly123"
+  expiration: 86400 # Token有效期（秒），这里是24小时

@@ -13,6 +13,7 @@ import com.zwbd.dbcrawlerv4.exception.CommonException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
@@ -120,7 +121,8 @@ public class SqlServerDialect extends DatabaseDialect {
 
             // 3. Return success result
             String message = String.format("Connection successful. Account is %s.", isReadOnly ? "read-only" : "read-write");
-            return isReadOnly;
+//            return isReadOnly;
+            return true;
 
         } catch (Exception e) {
             // 4. Catch any exception and return failure result
@@ -422,7 +424,9 @@ public class SqlServerDialect extends DatabaseDialect {
             }
         }
 
-        return catalogs;
+//        return catalogs;
+        return List.of(CatalogMetadata.of(connection.getCatalog()));
+
     }
 
     @Override

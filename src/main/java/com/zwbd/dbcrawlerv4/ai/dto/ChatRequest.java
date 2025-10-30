@@ -8,6 +8,7 @@ import org.springframework.ai.vectorstore.filter.Filter;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +34,14 @@ public record ChatRequest(
         @Schema(description = "可选的会话ID。如果提供，将加载此会话的历史记录。如果为空，将创建一个新的会话。")
         String sessionId
 ) {
+
+    @Override
+    public String sessionId() {
+        if (sessionId == null) {
+            return UUID.randomUUID().toString();
+        }
+        return sessionId;
+    }
 
     // 转换过滤条件列表为表达式字符串
     public String toExpression() {

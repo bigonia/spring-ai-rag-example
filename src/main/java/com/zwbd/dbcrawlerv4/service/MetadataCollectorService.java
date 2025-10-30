@@ -5,6 +5,7 @@ import com.zwbd.dbcrawlerv4.dao.DatabaseDialect;
 import com.zwbd.dbcrawlerv4.dao.DialectFactory;
 import com.zwbd.dbcrawlerv4.dto.metadata.*;
 import com.zwbd.dbcrawlerv4.entity.DataBaseInfo;
+import com.zwbd.dbcrawlerv4.entity.DataBaseType;
 import com.zwbd.dbcrawlerv4.entity.ExecutionMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,11 +109,15 @@ public class MetadataCollectorService {
                         .map(catalog -> {
                             try {
                                 //设置上下文
-                                connection.setCatalog(catalog.schemaName());
+                                if (dataBaseInfo.getType() == DataBaseType.SQLSERVER) {
+
+                                } else {
+                                    connection.setCatalog(catalog.schemaName());
+                                }
                                 log.info("handle catalog: {}", catalog);
                                 // 获取该schema下的所有表
                                 List<TableMetadata> tablesInSchema = dialect.getTablesForSchema(
-                                        connection, catalog.schemaName(), catalog.schemaName());
+                                        connection, connection.getCatalog(), catalog.schemaName());
 
                                 // 并行处理每个表，获取其详细元数据和指标
                                 List<TableMetadata> processedTables = tablesInSchema.stream()
@@ -122,7 +127,7 @@ public class MetadataCollectorService {
                                                 return processTable(connection, dialect, tableInfo, mode);
                                             } catch (SQLException e) {
                                                 throw new MetadataCollectionException(
-                                                        "处理表 '" + catalog.schemaName() + "." + tableInfo.tableName() + "' 失败", e);
+                                                        "handle table '" + catalog.schemaName() + "." + tableInfo.tableName() + "' error ", e);
                                             }
                                         })
                                         .collect(Collectors.toList());
@@ -131,7 +136,7 @@ public class MetadataCollectorService {
                                 return catalog.withTables(processedTables);
                             } catch (SQLException e) {
                                 throw new MetadataCollectionException(
-                                        "处理schema '" + catalog.schemaName() + "' 失败", e);
+                                        "handle schema '" + catalog.schemaName() + "' error ", e);
                             }
                         })
                         .collect(Collectors.toList());

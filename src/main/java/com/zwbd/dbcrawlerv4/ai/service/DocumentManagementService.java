@@ -2,7 +2,7 @@ package com.zwbd.dbcrawlerv4.ai.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zwbd.dbcrawlerv4.ai.repository.RAGRepository;
+import com.zwbd.dbcrawlerv4.ai.repository.VectorRepository;
 import com.zwbd.dbcrawlerv4.ai.dto.DocumentChunkDTO;
 import com.zwbd.dbcrawlerv4.ai.dto.DocumentInfoDTO;
 import org.springframework.ai.document.Document;
@@ -23,12 +23,12 @@ import java.util.Map;
 public class DocumentManagementService {
 
     private final JdbcTemplate jdbcTemplate;
-    private final RAGRepository ragRepository;
+    private final VectorRepository vectorRepository;
     private final ObjectMapper objectMapper;
 
-    public DocumentManagementService(JdbcTemplate jdbcTemplate, RAGRepository ragRepository, ObjectMapper objectMapper) {
+    public DocumentManagementService(JdbcTemplate jdbcTemplate, VectorRepository vectorRepository, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
-        this.ragRepository = ragRepository;
+        this.vectorRepository = vectorRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -124,7 +124,7 @@ public class DocumentManagementService {
         Document updatedDocument = new Document(chunkId, newContent, metadata);
 
         // 3. 调用 save 方法。由于主键冲突，VectorStore 将执行更新（Upsert）操作，并重新计算向量。
-        ragRepository.save(List.of(updatedDocument));
+        vectorRepository.save(List.of(updatedDocument));
     }
 
     /**
@@ -134,6 +134,6 @@ public class DocumentManagementService {
      */
     @Transactional
     public void deleteDocument(String documentId) {
-        ragRepository.deleteByDocumentId(documentId);
+        vectorRepository.deleteByDocumentId(documentId);
     }
 }

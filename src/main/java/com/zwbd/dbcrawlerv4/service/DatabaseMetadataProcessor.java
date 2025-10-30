@@ -27,7 +27,7 @@ import java.util.stream.Stream;
 /**
  * @Author: wnli
  * @Date: 2025/9/22 18:38
- * @Desc:
+ * @Desc: 元数据处理为非结构化数据，用于AI分析
  */
 @Component
 public class DatabaseMetadataProcessor {
@@ -137,15 +137,15 @@ public class DatabaseMetadataProcessor {
         column.comment().ifPresent(metrics::append);
         Optional.ofNullable(column.metrics()).ifPresent(m -> {
             String metricDetails = Stream.of(
-                            m.get().cardinality().map(v -> "Cardinality=" + v),
-                            m.get().uniquenessRate().map(v -> String.format("Uniqueness=%.2f%%", v * 100)),
-                            m.get().nullRate().map(v -> String.format("NullRate=%.2f%%", v * 100))
+                            m.get().cardinality().map(v -> "基数（Cardinality）=" + v),
+                            m.get().uniquenessRate().map(v -> String.format("唯一性（Uniqueness）=%.2f%%", v * 100)),
+                            m.get().nullRate().map(v -> String.format("空值率（NullRate）=%.2f%%", v * 100))
                     )
                     .flatMap(Optional::stream)
                     .collect(Collectors.joining(", "));
 
             if (!metricDetails.isEmpty()) {
-                metrics.append(" [Metrics: ").append(metricDetails).append("]");
+                metrics.append(" [指标值（Metrics）: ").append(metricDetails).append("]");
             }
         });
         return metrics.toString();

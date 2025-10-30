@@ -391,30 +391,57 @@ public class PostgreSqlDialect extends DatabaseDialect {
                 lowerType.contains("smallserial");
     }
 
+//    @Override
+//    public List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException {
+//        List<CatalogMetadata> catalogs = new ArrayList<>();
+//
+//        // In PostgreSQL, we get schemas within the current database
+//        String sql = "SELECT schema_name, " +
+//                    "CASE WHEN schema_name = current_schema() THEN 'Current schema' ELSE NULL END as remarks " +
+//                    "FROM information_schema.schemata " +
+//                    "WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast') " +
+//                    "AND schema_name NOT LIKE 'pg_temp_%' " +
+//                    "AND schema_name NOT LIKE 'pg_toast_temp_%' " +
+//                    "ORDER BY schema_name";
+//
+//        try (Statement stmt = connection.createStatement();
+//             ResultSet rs = stmt.executeQuery(sql)) {
+//
+//            while (rs.next()) {
+//                String schemaName = rs.getString("schema_name");
+//                String remarks = rs.getString("remarks");
+//
+//                catalogs.add(new CatalogMetadata(schemaName, remarks, List.of()));
+//            }
+//        }
+//
+//        return catalogs;
+//    }
+
     @Override
     public List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException {
         List<CatalogMetadata> catalogs = new ArrayList<>();
-        
+
         // In PostgreSQL, we get schemas within the current database
         String sql = "SELECT schema_name, " +
-                    "CASE WHEN schema_name = current_schema() THEN 'Current schema' ELSE NULL END as remarks " +
-                    "FROM information_schema.schemata " +
-                    "WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast') " +
-                    "AND schema_name NOT LIKE 'pg_temp_%' " +
-                    "AND schema_name NOT LIKE 'pg_toast_temp_%' " +
-                    "ORDER BY schema_name";
-        
+                "CASE WHEN schema_name = current_schema() THEN 'Current schema' ELSE NULL END as remarks " +
+                "FROM information_schema.schemata " +
+                "WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast') " +
+                "AND schema_name NOT LIKE 'pg_temp_%' " +
+                "AND schema_name NOT LIKE 'pg_toast_temp_%' " +
+                "ORDER BY schema_name";
+
         try (Statement stmt = connection.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
-            
+
             while (rs.next()) {
                 String schemaName = rs.getString("schema_name");
                 String remarks = rs.getString("remarks");
-                
+
                 catalogs.add(new CatalogMetadata(schemaName, remarks, List.of()));
             }
         }
-        
+
         return catalogs;
     }
 

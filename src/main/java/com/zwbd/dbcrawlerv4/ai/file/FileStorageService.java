@@ -44,27 +44,21 @@ public class FileStorageService {
     public Path store(MultipartFile file) {
         // 清理文件名
         String originalFileName = StringUtils.cleanPath(file.getOriginalFilename());
-
         try {
             if (originalFileName.contains("..")) {
                 throw new RuntimeException("Sorry! Filename contains invalid path sequence " + originalFileName);
             }
-
-            // 为了避免文件名冲突，我们可以在文件名中加入随机字符串
+            // 为了避免文件名冲突，在文件名中加入随机字符串
             String fileExtension = "";
             int i = originalFileName.lastIndexOf('.');
             if (i > 0) {
                 fileExtension = originalFileName.substring(i);
             }
             String newFileName = UUID.randomUUID().toString() + fileExtension;
-
-
             Path targetLocation = this.fileStorageLocation.resolve(newFileName);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-
             logger.info("Stored file {} as {}", originalFileName, newFileName);
             return targetLocation;
-
         } catch (IOException ex) {
             logger.error("Could not store file {}. Please try again!", originalFileName, ex);
             throw new RuntimeException("Could not store file " + originalFileName + ". Please try again!", ex);

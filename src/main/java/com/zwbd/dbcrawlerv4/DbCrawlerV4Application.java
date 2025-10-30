@@ -1,8 +1,10 @@
 package com.zwbd.dbcrawlerv4;
 
+import com.zwbd.dbcrawlerv4.ai.config.DynamicAiProvidersProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Environment;
 

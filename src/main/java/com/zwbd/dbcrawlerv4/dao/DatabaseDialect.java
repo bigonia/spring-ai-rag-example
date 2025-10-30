@@ -8,10 +8,12 @@ import com.zwbd.dbcrawlerv4.entity.DataBaseType;
 import com.zwbd.dbcrawlerv4.entity.ExecutionMode;
 import com.zwbd.dbcrawlerv4.exception.CommonException;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.util.ObjectUtils;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -42,7 +44,7 @@ public abstract class DatabaseDialect {
 
 
     /**
-     * 根据连接创建数据源
+     * 根据连接创建数据源，统一实现
      * 应该创建为单例对象
      * @param dataBaseInfo
      * @return
@@ -68,7 +70,8 @@ public abstract class DatabaseDialect {
     }
 
     /**
-     * 数据库驱动类名
+     * 数据库驱动类名，每种DB类型不同实现
+     *
      * @return
      */
     protected abstract String getDriverClassName();
@@ -109,14 +112,29 @@ public abstract class DatabaseDialect {
     public abstract Map<String, ExtendedMetrics> calculateMetricsForTable(Connection connection, TableMetadata tableMetadata, ExecutionMode mode) throws SQLException;
 
     /**
-     * Get all available catalogs/schemas in the database.
-     * This method discovers the schema hierarchy and returns basic catalog information.
+     * Get all available catalogs in the database.
+     * 必须为catalogs，数据库，不能和schema混淆
+     * 采用jdbc默认实现
      *
      * @param connection The database connection.
      * @return A list of CatalogMetadata objects representing available schemas/catalogs.
      * @throws SQLException if database access error occurs.
      */
-    public abstract List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException;
+    public  List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException{
+        connection.getCatalog();
+        if (!ObjectUtils.isEmpty(connection.getCatalog())) {
+            return List.of(CatalogMetadata.of(connection.getCatalog()));
+        }
+        return List.of();
+    }
+
+    /**
+     * 返回全部模式，必须先指定数据库
+     * @param connection
+     * @return
+     * @throws SQLException
+     */
+//    public abstract List<String> getSchemas(Connection connection) throws SQLException;
 
     /**
      * Get tables for a specific catalog/schema.
