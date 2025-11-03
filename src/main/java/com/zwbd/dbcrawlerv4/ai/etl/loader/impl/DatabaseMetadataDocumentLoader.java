@@ -56,6 +56,9 @@ public class DatabaseMetadataDocumentLoader implements DocumentLoader {
             log.info("DatabaseMetadata loaded");
             Stream<Document> stream = databaseMetadataProcessor.process(databaseMetadata, metadata.toMap(CommonConfig.objectMapper));
             List<Document> list = stream.toList();
+
+
+
             return list;
         } catch (Exception e) {
             log.error("Error creating database metadata", e);

@@ -11,26 +11,29 @@ import java.util.List;
  * In database systems, catalogs and schemas provide logical grouping of tables.
  * - Catalog: Top-level container (database name in MySQL, database name in SQL Server)
  * - Schema: Secondary-level container (schema name in PostgreSQL/SQL Server, database name in MySQL)
+ *
+ * 新的设计为，取消catalog层级抽象，只维护schema层级，catalog只用于业务流程中的数据库遍历
+ *
  */
 @With
-public record CatalogMetadata(
-        String schemaName,      // Schema name within the catalog
-        String remarks,         // Optional description/comments for the schema
-        List<TableMetadata> tables  // Tables contained within this schema
+public record SchemaMetadata(
+        String schemaName,
+        String remarks,
+        List<TableMetadata> tables
 ) {
 
     /**
      * Create a CatalogMetadata with minimal information
      */
-    public static CatalogMetadata of(String schemaName) {
-        return new CatalogMetadata(schemaName, null, List.of());
+    public static SchemaMetadata of(String schemaName) {
+        return new SchemaMetadata(schemaName, null, List.of());
     }
 
     /**
      * Create a CatalogMetadata with tables
      */
-    public static CatalogMetadata of(String schemaName, List<TableMetadata> tables) {
-        return new CatalogMetadata(schemaName, null, tables);
+    public static SchemaMetadata of(String schemaName, List<TableMetadata> tables) {
+        return new SchemaMetadata(schemaName, null, tables);
     }
 
 

@@ -2,21 +2,18 @@ package com.zwbd.dbcrawlerv4.dao.impl;
 
 import com.zwbd.dbcrawlerv4.config.TimeoutConfig;
 import com.zwbd.dbcrawlerv4.dao.DatabaseDialect;
-import com.zwbd.dbcrawlerv4.dto.metadata.CatalogMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.ColumnMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.ExtendedMetrics;
+import com.zwbd.dbcrawlerv4.dto.metadata.SchemaMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.TableMetadata;
 import com.zwbd.dbcrawlerv4.entity.DataBaseInfo;
 import com.zwbd.dbcrawlerv4.entity.DataBaseType;
 import com.zwbd.dbcrawlerv4.entity.ExecutionMode;
 import com.zwbd.dbcrawlerv4.exception.CommonException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Component;
-import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
-import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -28,7 +25,7 @@ import java.util.stream.Collectors;
 @Component
 public class SqlServerDialect extends DatabaseDialect {
 
-    private final TimeoutConfig timeoutConfig;
+//    private final TimeoutConfig timeoutConfig;
 
     protected String driver = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
 
@@ -68,8 +65,8 @@ public class SqlServerDialect extends DatabaseDialect {
         // Add default parameters
         urlBuilder.append(";encrypt=false");
         urlBuilder.append(";trustServerCertificate=true");
-        urlBuilder.append(";loginTimeout=").append(timeoutConfig.getConnectionTimeoutSeconds());
-        urlBuilder.append(";socketTimeout=").append(timeoutConfig.getSocketTimeoutMillis());
+        urlBuilder.append(";loginTimeout=").append(timeoutConfig.getConnectionTimeout());
+        urlBuilder.append(";socketTimeout=").append(timeoutConfig.getSocketTimeout() * 1000);
 
         // Apply extra properties if available
         Map<String, String> extraProperties = dataBaseInfo.getExtraProperties();
@@ -105,7 +102,7 @@ public class SqlServerDialect extends DatabaseDialect {
                 connection.setAutoCommit(false); // Start transaction
                 try (Statement statement = connection.createStatement()) {
                     // Set query timeout for connection test
-                    statement.setQueryTimeout(timeoutConfig.getQueryTimeoutSeconds());
+                    statement.setQueryTimeout(timeoutConfig.getConnectionTestTimeout());
                     // Create temporary table is a safe and effective way to verify write permissions
                     statement.execute("CREATE TABLE #dialect_write_test (id INT)");
                 }
@@ -130,83 +127,116 @@ public class SqlServerDialect extends DatabaseDialect {
         }
     }
 
-    public List<TableMetadata> getTables(Connection connection) throws SQLException {
-        List<TableMetadata> tables = new ArrayList<>();
-        String sql = "SELECT t.TABLE_NAME, t.TABLE_TYPE, " +
-                "ISNULL(ep.value, '') as TABLE_COMMENT, " +
-                "ISNULL(p.rows, 0) as TABLE_ROWS " +
-                "FROM INFORMATION_SCHEMA.TABLES t " +
-                "LEFT JOIN sys.tables st ON t.TABLE_NAME = st.name " +
-                "LEFT JOIN sys.partitions p ON st.object_id = p.object_id AND p.index_id IN (0,1) " +
-                "LEFT JOIN sys.extended_properties ep ON st.object_id = ep.major_id AND ep.minor_id = 0 AND ep.name = 'MS_Description' " +
-                "WHERE t.TABLE_CATALOG = ? AND t.TABLE_SCHEMA = 'dbo'";
-
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            // Set query timeout for tables query
-            ps.setQueryTimeout(timeoutConfig.getQueryTimeoutSeconds());
-            ps.setString(1, connection.getCatalog());
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                String tableName = rs.getString("TABLE_NAME");
-                String tableTypeStr = rs.getString("TABLE_TYPE");
-                String tableComment = rs.getString("TABLE_COMMENT");
-                long tableRows = rs.getLong("TABLE_ROWS");
-
-                TableMetadata.TableType tableType = "VIEW".equalsIgnoreCase(tableTypeStr) ?
-                        TableMetadata.TableType.VIEW : TableMetadata.TableType.TABLE;
-
-                tables.add(new TableMetadata(tableName, tableType,
-                        Optional.ofNullable(tableComment.isEmpty() ? null : tableComment),
-                        tableRows, null, null));
-            }
-        }
-        return tables;
-    }
-
     @Override
     public TableMetadata getTableDetails(Connection connection, TableMetadata tableInfo) throws SQLException {
-        // Get column details
-        List<ColumnMetadata> columns = new ArrayList<>();
-        String sql = "SELECT c.COLUMN_NAME, c.DATA_TYPE, " +
-                "ISNULL(ep.value, '') as COLUMN_COMMENT, " +
-                "CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as IS_PRIMARY_KEY, " +
-                "CASE WHEN c.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END as IS_NULLABLE " +
-                "FROM INFORMATION_SCHEMA.COLUMNS c " +
-                "LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk ON c.TABLE_NAME = pk.TABLE_NAME AND c.COLUMN_NAME = pk.COLUMN_NAME " +
-                "LEFT JOIN sys.columns sc ON OBJECT_NAME(sc.object_id) = c.TABLE_NAME AND sc.name = c.COLUMN_NAME " +
-                "LEFT JOIN sys.extended_properties ep ON sc.object_id = ep.major_id AND sc.column_id = ep.minor_id AND ep.name = 'MS_Description' " +
-                "WHERE c.TABLE_CATALOG = ? AND c.TABLE_NAME = ? " +
-                "ORDER BY c.ORDINAL_POSITION";
-
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            // Set query timeout for table details query
-            ps.setQueryTimeout(timeoutConfig.getQueryTimeoutSeconds());
-            ps.setString(1, connection.getCatalog());
-            ps.setString(2, tableInfo.tableName());
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                String columnComment = rs.getString("COLUMN_COMMENT");
-                columns.add(new ColumnMetadata(
-                        rs.getString("COLUMN_NAME"),
-                        rs.getString("DATA_TYPE"),
-                        Optional.ofNullable(columnComment.isEmpty() ? null : columnComment),
-                        rs.getBoolean("IS_PRIMARY_KEY"),
-                        rs.getBoolean("IS_NULLABLE"),
-                        null // Metrics to be calculated later
-                ));
-            }
-        }
-        tableInfo = tableInfo.withColumns(columns);
-        Optional<List<Map<String, Object>>> sampleData = getUniformTableSample(connection, tableInfo, SAMPLE_DATA_SIZE);
-
-        return new TableMetadata(
+        // 1. (新) 获取行数
+        long rowCount = getApproximateRowCount(connection, tableInfo.tableName());
+        // 2. (新) 获取列元数据
+        List<ColumnMetadata> columns = getColumnMetadata(connection, tableInfo.tableName());
+        // 3. (新) 创建一个包含行数和列的中间对象，用于采样
+        TableMetadata metadataWithDetails = new TableMetadata(
                 tableInfo.tableName(),
                 tableInfo.tableType(),
                 tableInfo.comment(),
-                tableInfo.rowCount(),
+                rowCount, // 使用新获取的行数
                 columns,
-                sampleData
+                Optional.empty() // 样本稍后填充
         );
+
+        // 4. 获取样本数据
+        Optional<List<Map<String, Object>>> sampleData = getUniformTableSample(
+                connection, metadataWithDetails, SAMPLE_DATA_SIZE
+        );
+
+        // 5. 返回包含所有信息的最终对象
+        return new TableMetadata(
+                metadataWithDetails.tableName(),
+                metadataWithDetails.tableType(),
+                metadataWithDetails.comment(),
+                metadataWithDetails.rowCount(),
+                metadataWithDetails.columns(),
+                sampleData // 填充样本
+        );
+    }
+
+    private List<ColumnMetadata> getColumnMetadata(Connection connection, String tableName) throws SQLException {
+        List<ColumnMetadata> columns = new ArrayList<>();
+
+        // SQL 已修正：
+        // 1. 修正了 IS_PRIMARY_KEY 的逻辑 (使用 sys.indexes 和 sys.index_columns)
+        // 2. 简化了 COLUMN_COMMENT 的逻辑 (移除 ISNULL)
+        String sql = "SELECT " +
+                "c.COLUMN_NAME, " +
+                "c.DATA_TYPE, " +
+                "ep.value as COLUMN_COMMENT, " + // 优化：直接选 value，允许 NULL
+                "CASE WHEN i.is_primary_key = 1 AND ic.column_id IS NOT NULL THEN 1 ELSE 0 END as IS_PRIMARY_KEY, " + // 修正：正确的 PK 逻辑
+                "CASE WHEN c.IS_NULLABLE = 'YES' THEN 1 ELSE 0 END as IS_NULLABLE " +
+                "FROM INFORMATION_SCHEMA.COLUMNS c " +
+                "LEFT JOIN sys.columns sc ON OBJECT_NAME(sc.object_id) = c.TABLE_NAME AND sc.name = c.COLUMN_NAME " +
+                "LEFT JOIN sys.extended_properties ep ON sc.object_id = ep.major_id AND sc.column_id = ep.minor_id AND ep.name = 'MS_Description' " +
+                "LEFT JOIN sys.indexes i ON sc.object_id = i.object_id AND i.is_primary_key = 1 " + // 修正：只关联主键索引
+                "LEFT JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id AND sc.column_id = ic.column_id " + // 修正：确保列在 PK 索引中
+                "WHERE c.TABLE_CATALOG = ? AND c.TABLE_NAME = ? " +
+                "ORDER BY c.ORDINAL_POSITION";
+
+        // 修正：将 ResultSet 也放入 try-with-resources 块
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setQueryTimeout(timeoutConfig.getMetadataQueryTimeout());
+            ps.setString(1, connection.getCatalog());
+            ps.setString(2, tableName);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    columns.add(new ColumnMetadata(
+                            rs.getString("COLUMN_NAME"),
+                            rs.getString("DATA_TYPE"),
+                            Optional.ofNullable(rs.getString("COLUMN_COMMENT")), // 优化：更简洁的 Optional
+                            rs.getBoolean("IS_PRIMARY_KEY"),
+                            rs.getBoolean("IS_NULLABLE"),
+                            null // Metrics to be calculated later
+                    ));
+                }
+            }
+        }
+        return columns;
+    }
+
+    /**
+     * 快速获取一个对象（表或索引视图）的近似行数。
+     * * 此方法通过查询系统分区表来实现，速度非常快。
+     * - 它对 表 (Table) 和 索引视图 (Indexed View) 有效。
+     * - 它对 非索引视图 (Non-Indexed View) 无效，并将返回 0，
+     * 因为它们没有物理分区。
+     * * @param connection 数据库连接
+     *
+     * @param objectName 表名或视图名
+     * @return 近似的行数
+     * @throws SQLException
+     */
+    private long getApproximateRowCount(Connection connection, String objectName) throws SQLException {
+        // 这个单一的查询可以同时处理表 (type='U') 和索引视图 (type='V')
+        // 因为它们都在 sys.partitions 中有记录 (index_id 0 或 1)。
+        // 非索引视图 (type='V') 在 sys.partitions 中没有匹配记录，
+        // 因此 SUM() 将返回 NULL，COALESCE 捕获这个 NULL 并返回 0。
+        String sql = "SELECT COALESCE(SUM(p.rows), 0) " +
+                "FROM sys.objects o " +
+                "LEFT JOIN sys.partitions p ON o.object_id = p.object_id AND p.index_id IN (0, 1) " +
+                "WHERE o.name = ? AND o.schema_id = SCHEMA_ID(SCHEMA_NAME())"; // 假定在当前用户的默认 schema 中
+
+        long rowCount = 0;
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, objectName);
+
+            // 此查询非常快，但设置一个短超时仍然是好习惯
+            ps.setQueryTimeout(timeoutConfig.getMetadataQueryTimeout() / 2);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    rowCount = rs.getLong(1);
+                }
+            }
+        }
+        return rowCount;
     }
 
     /**
@@ -219,24 +249,26 @@ public class SqlServerDialect extends DatabaseDialect {
      * @throws SQLException SQL execution exception
      */
     private Optional<List<Map<String, Object>>> getUniformTableSample(Connection connection, TableMetadata tableInfo, int sampleSize) throws SQLException {
-        // Try to find a numeric primary key
-        Optional<String> primaryKeyColumn = findNumericPrimaryKey(tableInfo);
-
         String sql;
-        if (primaryKeyColumn.isPresent() && tableInfo.rowCount() > sampleSize) {
-            // Use TABLESAMPLE for large tables (SQL Server specific)
-            double samplePercent = Math.min(100.0, (double) sampleSize * 100.0 / tableInfo.rowCount());
-            sql = String.format("SELECT TOP %d * FROM [%s] TABLESAMPLE (%f PERCENT)",
-                    sampleSize, tableInfo.tableName(), samplePercent);
-        } else {
-            // Use simple TOP for small tables or when no primary key
+        if (tableInfo.tableType() == TableMetadata.TableType.VIEW) {
+            //非均匀采样，直接查询
             sql = String.format("SELECT TOP %d * FROM [%s]", sampleSize, tableInfo.tableName());
+        } else if (tableInfo.rowCount() > 100000) {
+            //快速但有偏的采样,AI建议阈值为一百万
+            double samplePercent = Math.min(100.0, (double) sampleSize * 100.0 / tableInfo.rowCount());
+            sql = String.format("SELECT TOP %d * FROM [%s] TABLESAMPLE (%f PERCENT)", sampleSize, tableInfo.tableName(), samplePercent);
+        } else {
+            // 真正的随机采样 (适用于中小型 *表*),(在小表上，NEWID() 的性能开销可以接受)
+            sql = String.format("SELECT TOP %d * FROM [%s] ORDER BY NEWID()",
+                    sampleSize, tableInfo.tableName());
         }
-
+        if(tableInfo.tableName().equals("V_Project_Bid_Analysis")){
+            System.out.println();
+        }
         List<Map<String, Object>> samples = new ArrayList<>();
-        try (Statement statement = connection.createStatement();
-             ResultSet rs = statement.executeQuery(sql)) {
-
+        try (Statement statement = connection.createStatement();        ) {
+            statement.setQueryTimeout(timeoutConfig.getMetricsCalculationTimeout());
+            ResultSet rs = statement.executeQuery(sql);
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
 
@@ -269,7 +301,6 @@ public class SqlServerDialect extends DatabaseDialect {
         if (tableMetadata.columns().isEmpty()) {
             return Collections.emptyMap();
         }
-
         // Decide whether to use sampling based on mode and row count
         boolean useSampling = false;
         if (mode == ExecutionMode.FORCE_SAMPLE) {
@@ -277,43 +308,55 @@ public class SqlServerDialect extends DatabaseDialect {
         } else if (mode == ExecutionMode.AUTO && tableMetadata.rowCount() > SAMPLING_THRESHOLD) {
             useSampling = true;
         }
-
+        //特殊的。非索引视图无法快速计算行数，暂时计0，此时必须使用样本
+        //优化判定，如果计数为0，但是有样本，那么说明计数异常，为避免问题强制使用样本计数
+        if (!tableMetadata.sampleData().orElseGet(List::of).isEmpty() && tableMetadata.rowCount() == 0) {
+            useSampling = true;
+        }
         // Sample analysis
         if (useSampling) {
             return calculateMetricsFromSample(tableMetadata);
         }
-
         // Build batch aggregation query
-        StringBuilder sqlBuilder = new StringBuilder("SELECT COUNT(*) as total_rows");
+        List<String> selectExpressions = new ArrayList<>(); // 1. 创建一个列表
         for (ColumnMetadata column : tableMetadata.columns()) {
-            String colName = "[" + column.columnName() + "]"; // Use square brackets for SQL Server
+            String colName = "[" + column.columnName() + "]";
             String aliasName = column.columnName();
-
-            sqlBuilder.append(String.format(", SUM(CASE WHEN %s IS NULL THEN 1 ELSE 0 END) as [%s_nulls]", colName, aliasName));
-            sqlBuilder.append(String.format(", COUNT(DISTINCT %s) as [%s_cardinality]", colName, aliasName));
-
+            // 1. 空值计数
+            selectExpressions.add(String.format("SUM(CASE WHEN %s IS NULL THEN 1 ELSE 0 END) as [%s_nulls]", colName, aliasName));
+            if (isUnsupportedAggregationType(column.dataType())) {
+                continue;
+            }
+            // 2. (安全) 仅为支持的类型添加聚合
+            selectExpressions.add(String.format("APPROX_COUNT_DISTINCT(%s) as [%s_cardinality]", colName, aliasName));
             if (isNumericType(column.dataType())) {
-                sqlBuilder.append(String.format(", MIN(%s) as [%s_min]", colName, aliasName));
-                sqlBuilder.append(String.format(", MAX(%s) as [%s_max]", colName, aliasName));
-                sqlBuilder.append(String.format(", AVG(CAST(%s AS FLOAT)) as [%s_mean]", colName, aliasName));
-                sqlBuilder.append(String.format(", STDEV(%s) as [%s_stddev]", colName, aliasName));
+                selectExpressions.add(String.format("MIN(%s) as [%s_min]", colName, aliasName));
+                selectExpressions.add(String.format("MAX(%s) as [%s_max]", colName, aliasName));
+                selectExpressions.add(String.format("AVG(CAST(%s AS FLOAT)) as [%s_mean]", colName, aliasName));
+                selectExpressions.add(String.format("STDEV(%s) as [%s_stddev]", colName, aliasName));
             }
         }
-        sqlBuilder.append(" FROM [").append(tableMetadata.tableName()).append("]");
+        // 3. 构造最终 SQL
+        String sql = "SELECT " +
+                String.join(", ", selectExpressions) + // 4. 使用 String.join 自动处理逗号
+                " FROM [" + tableMetadata.tableName() + "]";
 
         // Execute query and parse results
         Map<String, ExtendedMetrics> metricsMap = new HashMap<>();
         try (Statement statement = connection.createStatement()) {
             // Set query timeout for metrics calculation
-            statement.setQueryTimeout(timeoutConfig.getMetricsQueryTimeoutSeconds());
-            ResultSet rs = statement.executeQuery(sqlBuilder.toString());
+            statement.setQueryTimeout(timeoutConfig.getMetricsCalculationTimeout());
+            ResultSet rs = statement.executeQuery(sql);
             if (rs.next()) {
-                long totalRows = rs.getLong("total_rows");
-                if (totalRows == 0) return Collections.emptyMap();
-
+//                long totalRows = rs.getLong("total_rows");
+//                if (totalRows == 0) return Collections.emptyMap();
+                long totalRows = tableMetadata.rowCount();
                 for (ColumnMetadata column : tableMetadata.columns()) {
                     long nullCount = rs.getLong(column.columnName() + "_nulls");
-                    long cardinality = rs.getLong(column.columnName() + "_cardinality");
+                    long cardinality = 0;
+                    if (!isUnsupportedAggregationType(column.dataType())) {
+                        cardinality = rs.getLong(column.columnName() + "_cardinality");
+                    }
 
                     double nullRate = (double) nullCount / totalRows;
                     double uniquenessRate = (double) cardinality / totalRows;
@@ -400,11 +443,27 @@ public class SqlServerDialect extends DatabaseDialect {
                 lowerType.contains("tinyint");
     }
 
-    @Override
-    public List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException {
-        List<CatalogMetadata> catalogs = new ArrayList<>();
 
-        // In SQL Server, we get schemas within the current database
+    @Override
+    public List<String> getCatalogNames(Connection connection) throws SQLException {
+        List<String> catalogNames = new ArrayList<>();
+        // sys.databases 存储了当前实例上的所有数据库
+        String sql = "SELECT name FROM sys.databases " +
+                "WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb') AND state_desc = 'ONLINE'";
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                catalogNames.add(rs.getString("name"));
+            }
+        }
+        return catalogNames;
+    }
+
+    @Override
+    public List<SchemaMetadata> getSchemas(Connection connection) throws SQLException {
+        List<SchemaMetadata> schemas = new ArrayList<>();
+
+        // 这个 SQL 查询与你之前 getCatalogs 中的完全相同
         String sql = "SELECT s.name as schema_name, " +
                 "CASE WHEN s.name = SCHEMA_NAME() THEN 'Current schema' ELSE NULL END as remarks " +
                 "FROM sys.schemas s " +
@@ -412,21 +471,15 @@ public class SqlServerDialect extends DatabaseDialect {
                 "'db_securityadmin', 'db_ddladmin', 'db_backupoperator', 'db_datareader', 'db_datawriter', " +
                 "'db_denydatareader', 'db_denydatawriter') " +
                 "ORDER BY s.name";
-
         try (Statement stmt = connection.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
-
             while (rs.next()) {
                 String schemaName = rs.getString("schema_name");
                 String remarks = rs.getString("remarks");
-
-                catalogs.add(new CatalogMetadata(schemaName, remarks, List.of()));
+                schemas.add(new SchemaMetadata(schemaName, remarks, List.of()));
             }
         }
-
-//        return catalogs;
-        return List.of(CatalogMetadata.of(connection.getCatalog()));
-
+        return schemas;
     }
 
     @Override
@@ -445,8 +498,7 @@ public class SqlServerDialect extends DatabaseDialect {
                 "ORDER BY t.TABLE_NAME";
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            // Set query timeout for schema tables query
-            ps.setQueryTimeout(timeoutConfig.getQueryTimeoutSeconds());
+            ps.setQueryTimeout(timeoutConfig.getMetadataQueryTimeout());
             ps.setString(1, catalogName != null ? catalogName : connection.getCatalog());
             ps.setString(2, schemaName);
             ResultSet rs = ps.executeQuery();
@@ -467,5 +519,16 @@ public class SqlServerDialect extends DatabaseDialect {
         }
 
         return tables;
+    }
+
+    /**
+     * 检查数据类型是否为不支持聚合的 LOB 类型 (image, text 等)
+     */
+    private boolean isUnsupportedAggregationType(String dataType) {
+        String lowerType = dataType.toLowerCase();
+        return lowerType.equals("image") ||
+                lowerType.equals("text") ||
+                lowerType.equals("ntext") ||
+                lowerType.equals("xml");
     }
 }

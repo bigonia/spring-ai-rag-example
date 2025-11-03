@@ -2,7 +2,7 @@ package com.zwbd.dbcrawlerv4.dao.impl;
 
 import com.zwbd.dbcrawlerv4.config.TimeoutConfig;
 import com.zwbd.dbcrawlerv4.dao.DatabaseDialect;
-import com.zwbd.dbcrawlerv4.dto.metadata.CatalogMetadata;
+import com.zwbd.dbcrawlerv4.dto.metadata.SchemaMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.ColumnMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.ExtendedMetrics;
 import com.zwbd.dbcrawlerv4.dto.metadata.TableMetadata;
@@ -11,11 +11,9 @@ import com.zwbd.dbcrawlerv4.entity.DataBaseType;
 import com.zwbd.dbcrawlerv4.entity.ExecutionMode;
 import com.zwbd.dbcrawlerv4.exception.CommonException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -67,7 +65,7 @@ public class PostgreSqlDialect extends DatabaseDialect {
         
         // Add default parameters
         urlBuilder.append("?sslmode=disable");
-        urlBuilder.append("&connectTimeout=").append(timeoutConfig.getConnectionTimeoutSeconds());
+        urlBuilder.append("&connectTimeout=").append(timeoutConfig.getConnectionTimeout());
         urlBuilder.append("&socketTimeout=").append(timeoutConfig.getSocketTimeout());
         
         // Apply extra properties if available
@@ -123,38 +121,6 @@ public class PostgreSqlDialect extends DatabaseDialect {
         }
     }
 
-    public List<TableMetadata> getTables(Connection connection) throws SQLException {
-        List<TableMetadata> tables = new ArrayList<>();
-        String sql = "SELECT t.table_name, t.table_type, " +
-                    "COALESCE(obj_description(c.oid), '') as table_comment, " +
-                    "COALESCE(s.n_tup_ins + s.n_tup_upd + s.n_tup_del, 0) as table_rows " +
-                    "FROM information_schema.tables t " +
-                    "LEFT JOIN pg_class c ON c.relname = t.table_name " +
-                    "LEFT JOIN pg_stat_user_tables s ON s.relname = t.table_name " +
-                    "WHERE t.table_catalog = ? AND t.table_schema = 'public'";
-
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            // Set query timeout for tables query
-            ps.setQueryTimeout(timeoutConfig.getQueryTimeoutSeconds());
-            ps.setString(1, connection.getCatalog());
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                String tableName = rs.getString("table_name");
-                String tableTypeStr = rs.getString("table_type");
-                String tableComment = rs.getString("table_comment");
-                long tableRows = rs.getLong("table_rows");
-
-                TableMetadata.TableType tableType = "VIEW".equalsIgnoreCase(tableTypeStr) ? 
-                    TableMetadata.TableType.VIEW : TableMetadata.TableType.TABLE;
-
-                tables.add(new TableMetadata(tableName, tableType, 
-                    Optional.ofNullable(tableComment.isEmpty() ? null : tableComment), 
-                    tableRows, null, null));
-            }
-        }
-        return tables;
-    }
-
     @Override
     public TableMetadata getTableDetails(Connection connection, TableMetadata tableInfo) throws SQLException {
         // Get column details
@@ -172,7 +138,7 @@ public class PostgreSqlDialect extends DatabaseDialect {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             // Set query timeout for table details query
-            ps.setQueryTimeout(timeoutConfig.getQueryTimeoutSeconds());
+            ps.setQueryTimeout(timeoutConfig.getMetadataQueryTimeout());
             ps.setString(1, connection.getCatalog());
             ps.setString(2, tableInfo.tableName());
             ResultSet rs = ps.executeQuery();
@@ -295,7 +261,7 @@ public class PostgreSqlDialect extends DatabaseDialect {
         Map<String, ExtendedMetrics> metricsMap = new HashMap<>();
         try (Statement statement = connection.createStatement()) {
             // Set query timeout for metrics calculation
-            statement.setQueryTimeout(timeoutConfig.getMetricsQueryTimeoutSeconds());
+            statement.setQueryTimeout(timeoutConfig.getMetricsCalculationTimeout());
             ResultSet rs = statement.executeQuery(sqlBuilder.toString());
             if (rs.next()) {
                 long totalRows = rs.getLong("total_rows");
@@ -334,6 +300,7 @@ public class PostgreSqlDialect extends DatabaseDialect {
         }
         return metricsMap;
     }
+
 
     /**
      * Calculate metrics from sample data in memory.
@@ -391,36 +358,26 @@ public class PostgreSqlDialect extends DatabaseDialect {
                 lowerType.contains("smallserial");
     }
 
-//    @Override
-//    public List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException {
-//        List<CatalogMetadata> catalogs = new ArrayList<>();
-//
-//        // In PostgreSQL, we get schemas within the current database
-//        String sql = "SELECT schema_name, " +
-//                    "CASE WHEN schema_name = current_schema() THEN 'Current schema' ELSE NULL END as remarks " +
-//                    "FROM information_schema.schemata " +
-//                    "WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast') " +
-//                    "AND schema_name NOT LIKE 'pg_temp_%' " +
-//                    "AND schema_name NOT LIKE 'pg_toast_temp_%' " +
-//                    "ORDER BY schema_name";
-//
-//        try (Statement stmt = connection.createStatement();
-//             ResultSet rs = stmt.executeQuery(sql)) {
-//
-//            while (rs.next()) {
-//                String schemaName = rs.getString("schema_name");
-//                String remarks = rs.getString("remarks");
-//
-//                catalogs.add(new CatalogMetadata(schemaName, remarks, List.of()));
-//            }
-//        }
-//
-//        return catalogs;
-//    }
+    @Override
+    public List<String> getCatalogNames(Connection connection) throws SQLException {
+        List<String> catalogNames = new ArrayList<>();
+        // pg_database 存储了所有数据库的信息
+        String sql = "SELECT datname FROM pg_database " +
+                "WHERE datistemplate = false AND datallowconn = true " +
+                "AND datname NOT IN ('postgres')"; // 'postgres' 库通常用于管理，可以酌情排除
+
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                catalogNames.add(rs.getString("datname"));
+            }
+        }
+        return catalogNames;
+    }
 
     @Override
-    public List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException {
-        List<CatalogMetadata> catalogs = new ArrayList<>();
+    public List<SchemaMetadata> getSchemas(Connection connection) throws SQLException {
+        List<SchemaMetadata> catalogs = new ArrayList<>();
 
         // In PostgreSQL, we get schemas within the current database
         String sql = "SELECT schema_name, " +
@@ -438,7 +395,7 @@ public class PostgreSqlDialect extends DatabaseDialect {
                 String schemaName = rs.getString("schema_name");
                 String remarks = rs.getString("remarks");
 
-                catalogs.add(new CatalogMetadata(schemaName, remarks, List.of()));
+                catalogs.add(new SchemaMetadata(schemaName, remarks, List.of()));
             }
         }
 
@@ -462,7 +419,7 @@ public class PostgreSqlDialect extends DatabaseDialect {
         
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             // Set query timeout for schema tables query
-            ps.setQueryTimeout(timeoutConfig.getQueryTimeoutSeconds());
+            ps.setQueryTimeout(timeoutConfig.getMetadataQueryTimeout());
             ps.setString(1, schemaName);
             ResultSet rs = ps.executeQuery();
             

@@ -1,7 +1,7 @@
 package com.zwbd.dbcrawlerv4.dao.impl;
 
 import com.zwbd.dbcrawlerv4.dao.DatabaseDialect;
-import com.zwbd.dbcrawlerv4.dto.metadata.CatalogMetadata;
+import com.zwbd.dbcrawlerv4.dto.metadata.SchemaMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.ColumnMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.ExtendedMetrics;
 import com.zwbd.dbcrawlerv4.dto.metadata.TableMetadata;
@@ -11,12 +11,10 @@ import com.zwbd.dbcrawlerv4.entity.ExecutionMode;
 import com.zwbd.dbcrawlerv4.exception.CommonException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
-import javax.sql.DataSource;
 import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -129,28 +127,6 @@ public class MySqlDialect extends DatabaseDialect {
         }
     }
 
-    public List<TableMetadata> getTables(Connection connection) throws SQLException {
-        List<TableMetadata> tables = new ArrayList<>();
-        String sql = "SELECT table_name, table_type, table_comment,table_rows FROM information_schema.tables WHERE table_schema = ?";
-
-
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, connection.getCatalog()); // 对于MySQL, schema通常等同于catalog
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                String tableName = rs.getString("table_name");
-                String tableTypeStr = rs.getString("table_type");
-                String tableComment = rs.getString("table_comment");
-                long tableRows = rs.getLong("table_rows");
-
-                TableMetadata.TableType tableType = "VIEW".equalsIgnoreCase(tableTypeStr) ? TableMetadata.TableType.VIEW : TableMetadata.TableType.TABLE;
-
-                tables.add(new TableMetadata(tableName, tableType, Optional.ofNullable(tableComment), tableRows, null, null));
-            }
-        }
-        return tables;
-    }
-
     @Override
     public TableMetadata getTableDetails(Connection connection, TableMetadata tableInfo) throws SQLException {
         // 1. 获取行数 (从 information_schema 获取的是估算值，但速度快)
@@ -165,7 +141,7 @@ public class MySqlDialect extends DatabaseDialect {
 
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             // Set query timeout to prevent blocking
-            ps.setQueryTimeout(30); // 30 seconds timeout for column metadata query
+            ps.setQueryTimeout(timeoutConfig.getMetricsCalculationTimeout());
             ps.setString(1, connection.getCatalog());
             ps.setString(2, tableInfo.tableName());
             log.debug("getTableDetails sql : {}", sql);
@@ -281,7 +257,7 @@ public class MySqlDialect extends DatabaseDialect {
         List<Map<String, Object>> samples = new ArrayList<>();
         try (Statement statement = connection.createStatement()) {
             // Set query timeout to prevent blocking
-            statement.setQueryTimeout(60); // 60 seconds timeout
+            statement.setQueryTimeout(timeoutConfig.getMetadataQueryTimeout()); // 60 seconds timeout
                 try (ResultSet rs = statement.executeQuery(sql)) {
 
                     ResultSetMetaData metaData = rs.getMetaData();
@@ -363,7 +339,7 @@ public class MySqlDialect extends DatabaseDialect {
         Map<String, ExtendedMetrics> metricsMap = new HashMap<>();
         try (Statement statement = connection.createStatement()) {
             // Set query timeout to prevent blocking on large tables
-            statement.setQueryTimeout(120); // 120 seconds timeout for metrics calculation
+            statement.setQueryTimeout(timeoutConfig.getMetadataQueryTimeout()); // 120 seconds timeout for metrics calculation
             log.debug("calculateMetricsForTable sql: {}", sqlBuilder);
             ResultSet rs = statement.executeQuery(sqlBuilder.toString());
             if (rs.next()) {
@@ -460,11 +436,31 @@ public class MySqlDialect extends DatabaseDialect {
     }
 
     @Override
-    public List<CatalogMetadata> getCatalogs(Connection connection) throws SQLException {
-        List<CatalogMetadata> catalogs = new ArrayList<>();
+    public List<String> getCatalogNames(Connection connection) throws SQLException {
+        List<String> catalogNames = new ArrayList<>();
+        // INFORMATION_SCHEMA.SCHEMATA 存储了所有数据库的信息
+        String sql = "SHOW DATABASES";
+
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                String schemaName = rs.getString(1);
+                // Skip system databases
+                if (!isSystemDatabase(schemaName)) {
+                    catalogNames.add(schemaName);
+                }
+            }
+        }
+        return catalogNames;
+    }
+
+    @Override
+    public List<SchemaMetadata> getSchemas(Connection connection) throws SQLException {
+        List<SchemaMetadata> catalogs = new ArrayList<>();
 
         if (!ObjectUtils.isEmpty(connection.getCatalog())) {
-            return List.of(CatalogMetadata.of(connection.getCatalog()));
+            return List.of(SchemaMetadata.of(connection.getCatalog()));
         }
 //        ResultSet rs = connection.getMetaData().getSchemas();
 //        while (rs.next()) {
@@ -476,8 +472,6 @@ public class MySqlDialect extends DatabaseDialect {
 //            }
 //        }
         // In MySQL, schemas are essentially databases
-        // We'll get all available databases/schemas
-
         String sql = "SHOW DATABASES";
 
         try (Statement stmt = connection.createStatement();
@@ -488,7 +482,7 @@ public class MySqlDialect extends DatabaseDialect {
 
                 // Skip system databases
                 if (!isSystemDatabase(schemaName)) {
-                    catalogs.add(CatalogMetadata.of(schemaName));
+                    catalogs.add(SchemaMetadata.of(schemaName));
                 }
             }
         }

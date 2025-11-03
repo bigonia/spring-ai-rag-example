@@ -2,7 +2,7 @@ package com.zwbd.dbcrawlerv4.service;
 
 import com.zwbd.dbcrawlerv4.dto.ColumnViewModel;
 import com.zwbd.dbcrawlerv4.dto.TableViewModel;
-import com.zwbd.dbcrawlerv4.dto.metadata.CatalogMetadata;
+import com.zwbd.dbcrawlerv4.dto.metadata.SchemaMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.ColumnMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.DatabaseMetadata;
 import com.zwbd.dbcrawlerv4.dto.metadata.TableMetadata;
@@ -70,7 +70,7 @@ public class DatabaseMetadataProcessor {
     }
 
 
-    private Document createTableDocument(TableMetadata table, CatalogMetadata catalog, DatabaseMetadata dbMeta, Map<String, Object> metadata) {
+    private Document createTableDocument(TableMetadata table, SchemaMetadata catalog, DatabaseMetadata dbMeta, Map<String, Object> metadata) {
         // TableMetadata 转换为 TableViewModel，进行数据预处理
         TableViewModel tableViewModel = toTableViewModel(table);
         // 1. 准备模板需要的数据模型 (Model)

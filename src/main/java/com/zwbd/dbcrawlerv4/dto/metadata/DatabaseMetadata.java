@@ -12,5 +12,5 @@ import java.util.List;
 @With
 public record DatabaseMetadata(String databaseProductName,
                                String databaseProductVersion,
-                               List<CatalogMetadata> catalogs) {
+                               List<SchemaMetadata> catalogs) {
 }
