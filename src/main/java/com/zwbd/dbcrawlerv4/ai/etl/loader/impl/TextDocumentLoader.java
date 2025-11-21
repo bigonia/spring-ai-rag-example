@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * @Author: wnli
@@ -22,7 +21,7 @@ import java.util.stream.Stream;
  * It's useful for ingesting text snippets, articles, or any textual content.
  */
 @Slf4j
-@Component
+//@Component
 public class TextDocumentLoader implements DocumentLoader {
     
     private static final String CONTENT_PROPERTY = "content";
@@ -44,7 +43,7 @@ public class TextDocumentLoader implements DocumentLoader {
 
     @Override
     public Set<DocumentType> getSourceType() {
-        return Set.of(DocumentType.TEXT);
+        return Set.of(DocumentType.TXT);
     }
 
 }

@@ -31,13 +31,12 @@ public abstract class BaseMetadata {
     @NotBlank(message = "来源系统不能为空")
     private String sourceSystem;
 
-//    private String content;
-
     @NotNull
     private Instant createdAt = Instant.now();
 
     public Map<String, Object> toMap(ObjectMapper objectMapper) {
-        return objectMapper.convertValue(this, new TypeReference<Map<String, Object>>() {});
+        return objectMapper.convertValue(this, new TypeReference<>() {
+        });
     }
 
 }

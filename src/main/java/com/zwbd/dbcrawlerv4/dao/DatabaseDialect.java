@@ -50,6 +50,8 @@ public abstract class DatabaseDialect {
      * 根据连接创建数据源，统一实现
      * 应该创建为单例对象
      *
+     *  todo 测试连接时复用了datasource，存在bug需要修复
+     *
      * @param dataBaseInfo
      * @return
      */

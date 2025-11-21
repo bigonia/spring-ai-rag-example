@@ -2,6 +2,7 @@ package com.zwbd.dbcrawlerv4.controller;
 
 import com.zwbd.dbcrawlerv4.dto.database.DataBaseInfoDTO;
 import com.zwbd.dbcrawlerv4.service.DataBaseInfoService;
+import com.zwbd.dbcrawlerv4.web.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,7 +30,6 @@ import java.util.Map;
 @Tag(name = "Database Info", description = "Database information management APIs")
 public class DataBaseInfoController {
 
-    private static final Logger log = LoggerFactory.getLogger(DataBaseInfoController.class);
     private final DataBaseInfoService dataBaseInfoService;
 
     /**
@@ -115,19 +115,18 @@ public class DataBaseInfoController {
      */
     @PostMapping("/{id}/test-connection")
     @Operation(summary = "Test database connection", description = "Test database connection by ID")
-    public ResponseEntity<Map<String, Object>> testConnection(
+    public ApiResponse testConnection(
             @Parameter(description = "Database info ID") @PathVariable Long id) {
         try {
             boolean isConnected = dataBaseInfoService.testConnection(id);
-            return ResponseEntity.ok(Map.of(
-                    "success", isConnected,
-                    "message", isConnected ? "Connection successful" : "Connection failed"
-            ));
+            if (isConnected) {
+                return ApiResponse.success();
+            } else {
+                return ApiResponse.error(50000, "connect fail");
+            }
+
         } catch (Exception e) {
-            return ResponseEntity.ok(Map.of(
-                    "success", false,
-                    "message", "Connection failed: " + e.getMessage()
-            ));
+            return ApiResponse.error(50000, e.getMessage());
         }
     }
 
@@ -136,19 +135,17 @@ public class DataBaseInfoController {
      */
     @PostMapping("/test-connection")
     @Operation(summary = "Test database connection", description = "Test database connection using provided configuration")
-    public ResponseEntity<Map<String, Object>> testConnection(@Valid @RequestBody DataBaseInfoDTO dto) {
+    public ApiResponse testConnection(@Valid @RequestBody DataBaseInfoDTO dto) {
         try {
             boolean isConnected = dataBaseInfoService.testConnection(dto);
-            return ResponseEntity.ok(Map.of(
-                    "success", isConnected,
-                    "message", isConnected ? "Connection successful" : "Connection failed"
-            ));
+            if (isConnected) {
+                return ApiResponse.success();
+            } else {
+                return ApiResponse.error(50000, "connect fail");
+            }
+
         } catch (Exception e) {
-            log.error("testConnection", e);
-            return ResponseEntity.ok(Map.of(
-                    "success", false,
-                    "message", "Connection failed: " + e.getMessage()
-            ));
+            return ApiResponse.error(50000, e.getMessage());
         }
     }
 

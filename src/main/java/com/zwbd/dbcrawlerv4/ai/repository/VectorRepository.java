@@ -23,7 +23,8 @@ import java.util.Optional;
  * * 封装了对 VectorStore 的所有操作，包括文档的增、删、查。
  */
 @Slf4j
-@Repository
+//@Repository
+@Deprecated
 public class VectorRepository {
 
     private final VectorStore vectorStore;
@@ -35,7 +36,7 @@ public class VectorRepository {
      * @param vectorStore  Spring AI 提供的向量存储抽象
      * @param jdbcTemplate Spring JDBC 核心类，用于执行自定义的SQL操作
      */
-    @Autowired
+//    @Autowired
     public VectorRepository(VectorStore vectorStore, JdbcTemplate jdbcTemplate) {
         this.vectorStore = vectorStore;
         this.jdbcTemplate = jdbcTemplate;
@@ -84,6 +85,14 @@ public class VectorRepository {
         // 使用 ->> 操作符来查询 JSONB 字段内的文本值
         final String sql = "DELETE FROM document_chunks WHERE metadata ->> 'document_id' = ?";
         this.jdbcTemplate.update(sql, documentId);
+    }
+
+    /**
+     * 条件删除
+     * @param expression
+     */
+    public void delete(Filter.Expression expression){
+        vectorStore.delete(expression);
     }
 
     /**

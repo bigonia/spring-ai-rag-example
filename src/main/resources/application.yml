@@ -145,3 +145,6 @@ management:
 jwt:
   secret: "ThisIsMyVeryLongAndSecureSecretKeyForTestingPurposesOnly123"
   expiration: 86400 # Token有效期（秒），这里是24小时
+
+file:
+  upload-dir: ./upload-dir

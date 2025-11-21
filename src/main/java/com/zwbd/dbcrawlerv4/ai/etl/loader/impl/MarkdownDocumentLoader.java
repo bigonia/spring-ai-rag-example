@@ -44,7 +44,6 @@ public class MarkdownDocumentLoader implements DocumentLoader {
         String filePathStr = fileUploadMetadata.getFilePath();
         String fileUri = Paths.get(filePathStr).toUri().toString();
         Resource resource = this.resourceLoader.getResource(fileUri);
-//        Resource resource = new FileSystemResource(filePathStr);
         // 配置并使用 Spring AI 的原生 Reader
         MarkdownDocumentReaderConfig config = MarkdownDocumentReaderConfig.builder()
                 // 附加所有元数据
@@ -59,21 +58,6 @@ public class MarkdownDocumentLoader implements DocumentLoader {
 
         MarkdownDocumentReader reader = new MarkdownDocumentReader(resource, config);
         return reader.get();
-
-//        Path filePath = Paths.get(filePathStr);
-//        log.info("Loading Markdown document from path: {}", filePath);
-//
-//        try {
-//            String content = Files.readString(filePath);
-//            Document document = new Document(content, fileUploadMetadata.toMap(CommonConfig.objectMapper));
-//
-//            log.info("Successfully loaded document from Markdown: {}", filePath.getFileName());
-//            return List.of(document);
-//
-//        } catch (IOException e) {
-//            log.error("Failed to read Markdown file at path: {}", filePath, e);
-//            throw new RuntimeException("Failed to read Markdown file", e);
-//        }
     }
 
     @Override

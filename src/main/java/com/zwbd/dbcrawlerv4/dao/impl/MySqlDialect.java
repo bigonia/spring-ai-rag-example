@@ -93,7 +93,7 @@ public class MySqlDialect extends DatabaseDialect {
     public boolean testConnection(Connection connection) {
         try {
             // 1. 基础连通性检查 (超时2秒)
-            if (!connection.isValid(2)) {
+            if (!connection.isValid(5)) {
                 throw new CommonException("数据库连接无效或已超时。");
             }
 

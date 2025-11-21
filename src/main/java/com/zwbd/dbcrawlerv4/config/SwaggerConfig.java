@@ -31,7 +31,7 @@ public class SwaggerConfig {
     /**
      * Configure OpenAPI documentation
      */
-    @Bean
+//    @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()

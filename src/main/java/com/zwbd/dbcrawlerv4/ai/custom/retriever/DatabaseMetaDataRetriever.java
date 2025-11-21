@@ -1,11 +1,9 @@
 package com.zwbd.dbcrawlerv4.ai.custom.retriever;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zwbd.dbcrawlerv4.ai.dto.ChatRequest;
 import com.zwbd.dbcrawlerv4.ai.dto.GeneratedQueries;
-import com.zwbd.dbcrawlerv4.ai.repository.VectorRepository;
-import com.zwbd.dbcrawlerv4.dto.metadata.TableMetadata;
+import com.zwbd.dbcrawlerv4.ai.repository.RAGDocumentRepository;
 import com.zwbd.dbcrawlerv4.service.DatabaseMetadataStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
@@ -22,30 +20,26 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
  * @Author: wnli
  * @Date: 2025/9/28 17:43
- * @Desc:
+ * @Desc: 文档查询增强
  */
 @Slf4j
 @Service
 public class DatabaseMetaDataRetriever implements DocumentRetriever, InitializingBean {
 
     private final ChatModel chatModel;
-    private final VectorRepository vectorRepository;
-
-    private final DatabaseMetadataStorageService databaseMetadataStorageService;
+    private final RAGDocumentRepository vectorRepository;
 
     private final ObjectMapper objectMapper;
 
-    public DatabaseMetaDataRetriever(ChatModel chatModel, VectorRepository vectorRepository, DatabaseMetadataStorageService databaseMetadataStorageService, ObjectMapper objectMapper) {
+    public DatabaseMetaDataRetriever(ChatModel chatModel, RAGDocumentRepository vectorRepository, DatabaseMetadataStorageService databaseMetadataStorageService, ObjectMapper objectMapper) {
         this.chatModel = chatModel;
         this.vectorRepository = vectorRepository;
-        this.databaseMetadataStorageService = databaseMetadataStorageService;
         this.objectMapper = objectMapper;
     }
 
@@ -71,7 +65,7 @@ public class DatabaseMetaDataRetriever implements DocumentRetriever, Initializin
                 .peek(query -> log.info("Executing retrieval for generated query: '{}'", query))
                 .flatMap(query -> {
                     try {
-                        return vectorRepository.findRelevantDocuments(query, topK, chatRequest.RAGFilters()).stream();
+                        return vectorRepository.search(query, topK, chatRequest.RAGFilters()).stream();
                     } catch (Exception e) {
                         log.error("Error retrieving documents for query: {}", query, e);
                         return Stream.empty();
@@ -92,25 +86,6 @@ public class DatabaseMetaDataRetriever implements DocumentRetriever, Initializin
                 .toList();
         log.info("Retrieved {} distinct documents from {} generated queries.", distinctDocs.size(), queries.size());
         return distinctDocs;
-    }
-
-    private void addMetaData(List<Document> docs) {
-        //附加汇总文档
-
-        //附加样例数据
-        Stream<Document> documentStream = docs.stream().filter(item -> item.getMetadata().get("document_type").equals("table_detail")).map(item -> {
-            try {
-                String schemaName = item.getMetadata().get("schema_name").toString();
-                String table_name = item.getMetadata().get("table_name").toString();
-                Optional<TableMetadata> sampleData = databaseMetadataStorageService.findTable("databaseID", schemaName, table_name);
-
-                return new Document(objectMapper.writeValueAsString(sampleData.get().sampleData()));
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException(e);
-            }
-        });
-
-
     }
 
 

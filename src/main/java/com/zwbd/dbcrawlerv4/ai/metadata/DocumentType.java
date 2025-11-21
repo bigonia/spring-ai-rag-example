@@ -21,7 +21,9 @@ public enum DocumentType {
 
     PPTX,
 
-    TEXT,
+    TXT,
+
+    XLS,
 
     UNKNOWN
 
