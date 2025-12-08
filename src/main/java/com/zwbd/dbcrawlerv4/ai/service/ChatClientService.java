@@ -2,6 +2,7 @@ package com.zwbd.dbcrawlerv4.ai.service;
 
 import com.zwbd.dbcrawlerv4.ai.dto.ChatRequest;
 import com.zwbd.dbcrawlerv4.ai.dto.StreamEvent;
+import com.zwbd.dbcrawlerv4.common.web.GlobalContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
@@ -12,10 +13,11 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.rag.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
+import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -33,6 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class ChatClientService {
 
+    @Qualifier("ragClient")
     @Autowired
     private ChatClient chatClient;
 
@@ -53,48 +56,17 @@ public class ChatClientService {
         return messageList;
     }
 
-    public Flux<StreamEvent> ragChat2(ChatRequest chatRequest) {
+
+    public Flux<StreamEvent> chat(ChatRequest chatRequest) {
         // 1. 获取包含元数据和内容的完整 ChatResponse 流
         Flux<ChatClientResponse> responseFlux = chatClient
                 .prompt()
                 .user(chatRequest.query())
-                .advisors(advisorSpec ->
-                        advisorSpec.params(Map.of(
-                                ChatMemory.CONVERSATION_ID, chatRequest.sessionId(),
-                                VectorStoreDocumentRetriever.FILTER_EXPRESSION, chatRequest.toExpression()
-
-                        )))
+                .advisors(a -> a.params(Map.of(ChatMemory.CONVERSATION_ID, chatRequest.sessionId())))
+                .advisors(a -> a.param(VectorStoreDocumentRetriever.FILTER_EXPRESSION, chatRequest.toExpression()))
+//                .toolContext()
                 .stream()
                 .chatClientResponse();
-
-        responseFlux.flatMap(chatClientResponse -> {
-
-            chatClientResponse.chatResponse().hasToolCalls();
-
-            chatClientResponse.chatResponse().getResult().getOutput().getToolCalls();
-            return Flux.fromIterable(List.of());
-        });
-
-        return null;
-
-    }
-
-    public Flux<StreamEvent> ragChat(ChatRequest chatRequest) {
-        // 1. 获取包含元数据和内容的完整 ChatResponse 流
-        Flux<ChatClientResponse> responseFlux = chatClient
-                .prompt()
-                .user(chatRequest.query())
-                .advisors(advisorSpec ->
-                        advisorSpec.params(Map.of(
-                                ChatMemory.CONVERSATION_ID, chatRequest.sessionId(),
-                                VectorStoreDocumentRetriever.FILTER_EXPRESSION, chatRequest.toExpression()
-
-                        )))
-//                .toolContext()
-//                .call()
-                .stream()
-
-                .chatClientResponse(); // 关键：获取完整的响应流，而不是 .content()
 
         // 2. SESSION_INFO 事件（不变）
         Flux<StreamEvent> sessionInfoStream = Flux.just(
@@ -107,18 +79,7 @@ public class ChatClientService {
 
             List<StreamEvent> eventsInThisChunk = new ArrayList<>();
 
-            // 提取工具调用，这里显示关闭了工具自动执行，改为手动
             ChatResponse chatResponse = chatClientResponse.chatResponse();
-            chatClientResponse.context();
-//            while (chatResponse.hasToolCalls()) {
-//                ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(promptWithMemory,
-//                        chatResponse);
-//                chatMemory.add(chatRequest.sessionId(), toolExecutionResult.conversationHistory()
-//                        .get(toolExecutionResult.conversationHistory().size() - 1));
-//                promptWithMemory = new Prompt(chatMemory.get(conversationId), chatOptions);
-//                chatResponse = chatModel.call(promptWithMemory);
-//                chatMemory.add(conversationId, chatResponse.getResult().getOutput());
-//            }
 
             // 提取文档，仅一次
             @SuppressWarnings("unchecked")
@@ -129,6 +90,22 @@ public class ChatClientService {
                 contextSent.set(true);
                 log.info("从 context 捕获 {} 个文档", documents.size());
             }
+
+            // 检查当前 chunk 是否包含工具调用的意图
+            var output = chatResponse.getResult().getOutput();
+            if (output != null && output.getToolCalls() != null && !output.getToolCalls().isEmpty()) {
+                // 提取工具名称和参数
+                output.getToolCalls().forEach(toolCall -> {
+                    Map<String, Object> toolInfo = Map.of(
+                            "toolName", toolCall.name(),
+                            "toolType", toolCall.type(),
+                            "arguments", toolCall.arguments()
+                    );
+                    eventsInThisChunk.add(new StreamEvent(StreamEvent.EventType.TOOL_EXECUTION, toolInfo));
+                    log.info("检测到工具调用: {}", toolCall.name());
+                });
+            }
+
             // 提取响应内容
             String content = chatResponse.getResult() != null
                     ? chatResponse.getResult().getOutput().getText()

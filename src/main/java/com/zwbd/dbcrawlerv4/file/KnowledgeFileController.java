@@ -1,6 +1,6 @@
 package com.zwbd.dbcrawlerv4.file;
 
-import com.zwbd.dbcrawlerv4.web.ApiResponse;
+import com.zwbd.dbcrawlerv4.common.web.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -59,42 +59,62 @@ public class KnowledgeFileController {
         }
     }
 
-    @PostMapping("/{id}/preview")
-    @Operation(summary = "preview file Document")
-    public ApiResponse<List<Document>> previewDoc(@PathVariable("id") Long fileId) {
-        try {
-            List<Document> documents = knowledgeFileService.previewVectorization(fileId);
-            return ApiResponse.success(documents);
-        } catch (Exception e) {
-            // 捕获其他意外错误
-            log.error("处理文件 (ID: {}) 时发生意外错误", fileId, e);
-            return ApiResponse.error(50000, e.getMessage());
-        }
-    }
-
     /**
-     * 2. 触发指定文件的向量化处理
+     * 生成领域文档
      *
      * @param fileId 文件的数据库ID
      * @return 状态响应
      */
-    @PostMapping("/{id}/vectorize")
-    @Operation(summary = "vectorize file")
-    public ResponseEntity<String> vectorizeFile(@PathVariable("id") Long fileId) {
+    @PostMapping("/{id}/toDoc")
+    @Operation(summary = "file 2 doc")
+    public ApiResponse<String> file2Doc(@PathVariable("id") Long fileId) {
         try {
             // 正式模式：解析、存储、更新状态
-            knowledgeFileService.triggerVectorization(fileId);
-            return ResponseEntity.ok("文件 (ID: " + fileId + ") 向量化处理已触发并完成。");
-        } catch (RuntimeException e) {
-            log.warn("触发向量化失败 (ID: {}): {}", fileId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+            knowledgeFileService.toDomainDocument(fileId);
+            return ApiResponse.ok("文件 (ID: " + fileId + ") 转换完成。");
         } catch (Exception e) {
             // 捕获其他意外错误
             log.error("处理文件 (ID: {}) 时发生意外错误", fileId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("处理失败: " + e.getMessage());
+            return ApiResponse.error("处理失败: " + e.getMessage());
         }
     }
+
+//    @PostMapping("/{id}/preview")
+//    @Operation(summary = "preview file Document")
+//    public ApiResponse<List<Document>> previewDoc(@PathVariable("id") Long fileId) {
+//        try {
+//            List<Document> documents = knowledgeFileService.previewVectorization(fileId);
+//            return ApiResponse.success(documents);
+//        } catch (Exception e) {
+//            // 捕获其他意外错误
+//            log.error("处理文件 (ID: {}) 时发生意外错误", fileId, e);
+//            return ApiResponse.error(50000, e.getMessage());
+//        }
+//    }
+//
+//    /**
+//     * 2. 触发指定文件的向量化处理
+//     *
+//     * @param fileId 文件的数据库ID
+//     * @return 状态响应
+//     */
+//    @PostMapping("/{id}/vectorize")
+//    @Operation(summary = "vectorize file")
+//    public ResponseEntity<String> vectorizeFile(@PathVariable("id") Long fileId) {
+//        try {
+//            // 正式模式：解析、存储、更新状态
+//            knowledgeFileService.triggerVectorization(fileId);
+//            return ResponseEntity.ok("文件 (ID: " + fileId + ") 向量化处理已触发并完成。");
+//        } catch (RuntimeException e) {
+//            log.warn("触发向量化失败 (ID: {}): {}", fileId, e.getMessage());
+//            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+//        } catch (Exception e) {
+//            // 捕获其他意外错误
+//            log.error("处理文件 (ID: {}) 时发生意外错误", fileId, e);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                    .body("处理失败: " + e.getMessage());
+//        }
+//    }
 
 
     /**
@@ -199,19 +219,19 @@ public class KnowledgeFileController {
      * 7. 仅删除文件的向量数据（保留文件和元数据）
      * 状态重置为 UPLOADED
      */
-    @DeleteMapping("/{id}/vectors")
-    public ResponseEntity<String> deleteFileVectors(@PathVariable("id") Long fileId) {
-        try {
-            knowledgeFileService.removeVectorsOnly(fileId);
-            return ResponseEntity.ok("文件 (ID: " + fileId + ") 的向量数据已清除，状态重置为 UPLOADED。");
-        } catch (RuntimeException e) {
-            // 可能是找不到文件，或者删除过程中出错
-            log.warn("清除向量数据失败 (ID: {}): {}", fileId, e.getMessage());
-            if (e.getMessage().contains("File not found")) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
-            }
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
-        }
-    }
+//    @DeleteMapping("/{id}/vectors")
+//    public ResponseEntity<String> deleteFileVectors(@PathVariable("id") Long fileId) {
+//        try {
+//            knowledgeFileService.removeVectorsOnly(fileId);
+//            return ResponseEntity.ok("文件 (ID: " + fileId + ") 的向量数据已清除，状态重置为 UPLOADED。");
+//        } catch (RuntimeException e) {
+//            // 可能是找不到文件，或者删除过程中出错
+//            log.warn("清除向量数据失败 (ID: {}): {}", fileId, e.getMessage());
+//            if (e.getMessage().contains("File not found")) {
+//                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+//            }
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+//        }
+//    }
 
 }

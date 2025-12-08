@@ -22,6 +22,11 @@ public record StreamEvent(
          * 上下文事件，在流开始时发送，包含检索到的文档。
          */
         CONTEXT,
+
+        /**
+         * 工具执行
+         */
+        TOOL_EXECUTION,
         /**
          * 文本事件，流式传输 LLM 生成的回答文本。
          */

@@ -10,7 +10,10 @@ import lombok.Data;
 @Data
 public class DatabaseRecordMetadata extends BaseMetadata {
 
-    private long databaseId;
+    String schema;
 
-    // ... Getters, Setters, 构造函数 ...
+    String table;
+
+    String template;
+
 }

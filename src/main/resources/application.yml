@@ -95,8 +95,13 @@ spring:
     init:
       mode: always
   jpa:
+    properties:
+      hibernate:
+        tenant_identifier_resolver: com.zwbd.dbcrawlerv4.common.SpaceIdResolver
     hibernate:
       ddl-auto: update
+
+
 
 # -------------------------------------------------------------------
 # Database Timeout Configuration

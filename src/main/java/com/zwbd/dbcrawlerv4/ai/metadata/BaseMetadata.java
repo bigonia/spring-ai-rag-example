@@ -1,42 +1,47 @@
 package com.zwbd.dbcrawlerv4.ai.metadata;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import com.zwbd.dbcrawlerv4.common.web.GlobalContext;
+import com.zwbd.dbcrawlerv4.document.entity.DocMode;
 import lombok.Data;
 
-import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * @Author: wnli
  * @Date: 2025/10/21 10:31
- * @Desc:
+ * @Desc: 为了兼容不同业务定义抽象类，除了基础属性外还包括每个业务的独特属性，作为最终document的metadata存储
  */
 @Data
-//@JsonIgnoreProperties({"fileAddress", "anotherInternalField"})
 public abstract class BaseMetadata {
 
-    @JsonIgnore
-    @NotBlank(message = "文档ID 不能为空")
-    private String documentId = UUID.randomUUID().toString();
+    private String sourceId;
 
-    @NotBlank(message = "文档类型 不能为空")
+    private String sourceName;
+
     private DocumentType documentType;
 
-    @NotBlank(message = "来源系统不能为空")
+    @JsonIgnore
+    private DocMode docMode;
+
+//    @JsonIgnore
     private String sourceSystem;
 
-    @NotNull
-    private Instant createdAt = Instant.now();
+    @JsonIgnore
+    private static final ObjectMapper mapper = new ObjectMapper();
 
-    public Map<String, Object> toMap(ObjectMapper objectMapper) {
-        return objectMapper.convertValue(this, new TypeReference<>() {
-        });
+    public Map<String, Object> toMap() {
+        // 临时创建忽略Null值的ObjectMapper（避免影响全局配置）
+        ObjectMapper nonNullMapper = mapper.copy()
+                .setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
+        Map<String, Object> map = nonNullMapper.convertValue(this, new TypeReference<>() {});
+        // 增加业务空间标识
+        map.put(GlobalContext.KEY_SPACE_ID, GlobalContext.getSpaceId());
+        return map;
     }
 
 }

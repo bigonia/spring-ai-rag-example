@@ -39,7 +39,12 @@ public class SecurityConfig {
                 .password(passwordEncoder().encode("editor123"))
                 .roles("editor")
                 .build();
-        return new InMemoryUserDetailsManager(admin, user);
+        UserDetails guest = User.builder()
+                .username("guest")
+                .password(passwordEncoder().encode("guest123"))
+                .roles("guest")
+                .build();
+        return new InMemoryUserDetailsManager(admin, user,guest);
     }
 
     // 2. 定义密码编码器

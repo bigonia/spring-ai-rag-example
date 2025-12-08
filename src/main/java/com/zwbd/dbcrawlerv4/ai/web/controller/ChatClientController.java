@@ -32,7 +32,7 @@ public class ChatClientController {
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<StreamEvent> chatStream(@Valid @RequestBody ChatRequest request) {
-        return chatClientService.ragChat(request);
+        return chatClientService.chat(request);
     }
 
     @PostMapping(value = "/history/{id}")

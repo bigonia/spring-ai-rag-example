@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zwbd.dbcrawlerv4.ai.dto.ChatRequest;
 import com.zwbd.dbcrawlerv4.ai.dto.GeneratedQueries;
 import com.zwbd.dbcrawlerv4.ai.repository.RAGDocumentRepository;
-import com.zwbd.dbcrawlerv4.service.DatabaseMetadataStorageService;
+import com.zwbd.dbcrawlerv4.datasource.service.DatabaseMetadataStorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
@@ -65,7 +65,7 @@ public class DatabaseMetaDataRetriever implements DocumentRetriever, Initializin
                 .peek(query -> log.info("Executing retrieval for generated query: '{}'", query))
                 .flatMap(query -> {
                     try {
-                        return vectorRepository.search(query, topK, chatRequest.RAGFilters()).stream();
+                        return vectorRepository.search(query, topK,0.3, chatRequest.RAGFilters()).stream();
                     } catch (Exception e) {
                         log.error("Error retrieving documents for query: {}", query, e);
                         return Stream.empty();

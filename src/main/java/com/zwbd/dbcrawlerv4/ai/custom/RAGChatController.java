@@ -3,7 +3,7 @@ package com.zwbd.dbcrawlerv4.ai.custom;
 import com.zwbd.dbcrawlerv4.ai.dto.ChatRequest;
 import com.zwbd.dbcrawlerv4.ai.dto.LocalChatResponse;
 import com.zwbd.dbcrawlerv4.ai.dto.StreamEvent;
-import com.zwbd.dbcrawlerv4.ai.custom.service.ConversationService;
+import com.zwbd.dbcrawlerv4.ai.custom.service.ConversationService2;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -35,13 +35,13 @@ import reactor.core.publisher.Flux;
 @Tag(name = "RAG API", description = "Retrieval-Augmented Generation endpoints for intelligent question answering")
 public class RAGChatController {
 
-    private final ConversationService conversationService;
+    private final ConversationService2 conversationService2;
 
 
     @Operation(summary = "标准问答接口", description = "一次性返回完整的回答和上下文，支持多轮对话和 RAG 开关。")
     @PostMapping("/chat")
     public ResponseEntity<LocalChatResponse> chat(@Valid @RequestBody ChatRequest request) {
-        LocalChatResponse response = conversationService.ask(
+        LocalChatResponse response = conversationService2.ask(
                 request
         );
         return ResponseEntity.ok(response);
@@ -65,7 +65,7 @@ public class RAGChatController {
     ))
     @PostMapping(value = "/chat-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<StreamEvent> chatStream(@Valid @RequestBody ChatRequest request) {
-        return conversationService.stream(request);
+        return conversationService2.stream(request);
     }
 
 

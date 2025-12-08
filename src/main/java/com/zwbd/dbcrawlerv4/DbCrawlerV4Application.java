@@ -7,12 +7,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Environment;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 @Slf4j
 @SpringBootApplication
+@EnableJpaAuditing
 public class DbCrawlerV4Application {
 
     public static void main(String[] args) {

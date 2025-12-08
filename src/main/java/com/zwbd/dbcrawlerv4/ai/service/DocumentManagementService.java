@@ -2,10 +2,12 @@ package com.zwbd.dbcrawlerv4.ai.service;
 
 import com.zwbd.dbcrawlerv4.ai.dto.DocumentChunkDTO;
 import com.zwbd.dbcrawlerv4.ai.dto.DocumentInfoDTO;
-import com.zwbd.dbcrawlerv4.ai.etl.loader.DocumentLoader;
 import com.zwbd.dbcrawlerv4.ai.metadata.BaseMetadata;
 import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
 import com.zwbd.dbcrawlerv4.ai.repository.RAGDocumentRepository;
+import com.zwbd.dbcrawlerv4.common.web.ApiResponse;
+import com.zwbd.dbcrawlerv4.document.entity.DomainDocument;
+import com.zwbd.dbcrawlerv4.document.etl.loader.DocumentLoader;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
@@ -13,7 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @Desc: 核心文档管理服务
@@ -39,6 +44,14 @@ public class DocumentManagementService {
             }
         }
         log.info("Initialized Service with loaders: {}", documentLoaders.keySet());
+    }
+
+    @Transactional
+    public List<Document> ingest(DomainDocument domainDocument) {
+        log.info("Starting ingestion domainDocument {}", domainDocument.getId());
+        List<Document> chunks = textSplitter.split(domainDocument.getDocument());
+        documentRepository.save(chunks);
+        return chunks;
     }
 
     /**
@@ -69,6 +82,11 @@ public class DocumentManagementService {
         return chunks;
     }
 
+    public List<Document> search(String query, int topK, double threshold) {
+        List<Document> documents = documentRepository.search(query, topK, threshold, null);
+        return documents;
+    }
+
     /**
      * 查询逻辑文档列表
      */
@@ -79,8 +97,8 @@ public class DocumentManagementService {
     /**
      * 获取文档分片详情
      */
-    public List<DocumentChunkDTO> getDocumentChunks(String documentId) {
-        return documentRepository.findChunksByDocumentId(documentId);
+    public List<DocumentChunkDTO> getDocumentChunks(String sourceId) {
+        return documentRepository.findChunksByDocumentId(sourceId);
     }
 
     /**
@@ -107,8 +125,9 @@ public class DocumentManagementService {
      * 删除文档
      */
     @Transactional
-    public void deleteDocument(String documentId) {
-        documentRepository.deleteByDocumentId(documentId);
+    public ApiResponse deleteSourceId(String sourceId) {
+        documentRepository.deleteBySourceId(sourceId);
+        return ApiResponse.success();
     }
 
     /**

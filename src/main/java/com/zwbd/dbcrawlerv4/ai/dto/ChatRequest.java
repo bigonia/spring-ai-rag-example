@@ -2,10 +2,12 @@ package com.zwbd.dbcrawlerv4.ai.dto;
 
 
 import com.zwbd.dbcrawlerv4.ai.enums.Operator;
+import com.zwbd.dbcrawlerv4.common.web.GlobalContext;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import org.springframework.ai.vectorstore.filter.Filter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,7 +47,12 @@ public record ChatRequest(
 
     // 转换过滤条件列表为表达式字符串
     public String toExpression() {
-        return RAGFilters == null ? "" : RAGFilters.stream()
+//        return RAGFilters == null ? "" : RAGFilters.stream()
+//                .map(ChatRequest::toSingleExpr)
+//                .collect(Collectors.joining(" and "));
+        List<RAGFilter> ragFilters = Optional.ofNullable(RAGFilters).orElse(new ArrayList<>());
+        ragFilters.add(new RAGFilter(GlobalContext.KEY_SPACE_ID, Operator.EQUALS, GlobalContext.getSpaceId()));
+        return ragFilters.stream()
                 .map(ChatRequest::toSingleExpr)
                 .collect(Collectors.joining(" and "));
     }

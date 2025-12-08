@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Data;
+import org.hibernate.annotations.TenantId;
 
 import java.time.Instant;
 
@@ -21,6 +22,10 @@ import java.time.Instant;
 @Entity
 @Table(name = "knowledge_files")
 public class KnowledgeFile {
+
+    @TenantId
+    @Column(name = "space_id", nullable = false, updatable = false)
+    private String spaceId;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,14 +41,7 @@ public class KnowledgeFile {
     private String filePath; // 文件在服务器上的完整路径
 
     @Column(nullable = true)
-    private String sourceSystem; // 文档来源 (您之前的字段)
-
-    @Column(nullable = false)
-    @Enumerated(EnumType.STRING)
-    private ProcessingStatus processingStatus; // 文件处理状态
-
-    @Column(columnDefinition = "TEXT")
-    private String errorMessage; // 记录处理失败的原因
+    private String sourceSystem; // 文档来源
 
     @Column(nullable = false)
     private Instant createdAt; // 上传时间

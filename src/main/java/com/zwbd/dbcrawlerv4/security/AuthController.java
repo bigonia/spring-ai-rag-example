@@ -16,6 +16,7 @@ import java.util.Map;
  * @Date: 2025/10/15 15:13
  * @Desc:
  */
+//@NoApiWrapper
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -31,7 +32,8 @@ public class AuthController {
     }
 
     // 定义请求体
-    public record AuthRequest(String username, String password) {}
+    public record AuthRequest(String username, String password) {
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> createAuthenticationToken(@RequestBody AuthRequest authRequest) throws Exception {
@@ -67,7 +69,7 @@ public class AuthController {
 
         // 模拟返回用户信息
         Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("roles", new String[]{"admin"});
+        userInfo.put("roles", new String[]{"guest"});
         userInfo.put("introduction", "I am a super administrator");
         userInfo.put("avatar", "https://wpimg.wallstcn.com/f778738c-e4f8-4870-b634-56703b4acafe.gif");
         userInfo.put("name", "Super Admin");

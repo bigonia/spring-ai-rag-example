@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zwbd.dbcrawlerv4.ai.dto.DocumentChunkDTO;
 import com.zwbd.dbcrawlerv4.ai.dto.DocumentInfoDTO;
 import com.zwbd.dbcrawlerv4.ai.dto.RAGFilter;
+import com.zwbd.dbcrawlerv4.common.web.GlobalContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
@@ -15,10 +16,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * @Desc: RAG 文档混合存储库
@@ -55,6 +53,14 @@ public class RAGDocumentRepository {
         Assert.notEmpty(documents, "Documents list must not be empty");
         int totalSize = documents.size();
 
+        // 1. 注入业务空间 ID
+        String spaceId = GlobalContext.getSpaceId();
+        String spaceKey = GlobalContext.KEY_SPACE_ID;
+
+        for (Document doc : documents) {
+            doc.getMetadata().put(spaceKey, spaceId);
+        }
+
         for (int i = 0; i < totalSize; i += BATCH_SIZE) {
             int end = Math.min(i + BATCH_SIZE, totalSize);
             List<Document> batch = documents.subList(i, end);
@@ -71,13 +77,34 @@ public class RAGDocumentRepository {
     /**
      * 语义搜索
      */
-    public List<Document> search(String query, int topK, List<RAGFilter> filters) {
+    public List<Document> search(String query, int topK, double threshold,List<RAGFilter> filters) {
         Assert.hasText(query, "Query must not be empty");
-        SearchRequest.Builder builder = SearchRequest.builder().query(query).topK(topK);
+        SearchRequest.Builder builder = SearchRequest.builder().query(query).topK(topK).similarityThreshold(threshold);
 
+        // 1. 构建空间隔离 Filter
+        Filter.Expression spaceExpression = new Filter.Expression(
+                Filter.ExpressionType.EQ,
+                new Filter.Key(GlobalContext.KEY_SPACE_ID),
+                new Filter.Value(GlobalContext.getSpaceId())
+        );
+
+        // 2. 处理用户传入的 Filters
+        Filter.Expression finalExpression = spaceExpression;
         if (!CollectionUtils.isEmpty(filters)) {
-            buildFilterExpression(filters).ifPresent(builder::filterExpression);
+            Optional<Filter.Expression> userExpressionOpt = buildFilterExpression(filters);
+            if (userExpressionOpt.isPresent()) {
+                // 将空间 Filter 和 用户 Filter 进行 AND 组合
+                finalExpression = new Filter.Expression(
+                        Filter.ExpressionType.AND,
+                        spaceExpression,
+                        userExpressionOpt.get()
+                );
+            }
         }
+
+        // 3. 应用最终的 Filter
+        builder.filterExpression(finalExpression);
+
         return vectorStore.similaritySearch(builder.build());
     }
 
@@ -85,7 +112,25 @@ public class RAGDocumentRepository {
      * 删除指定条件的文档（利用 VectorStore 的 Filter 能力）
      */
     public void deleteByExpression(Filter.Expression expression) {
-        vectorStore.delete(expression);
+        // 构建空间隔离 Filter
+        Filter.Expression spaceExpression = new Filter.Expression(
+                Filter.ExpressionType.EQ,
+                new Filter.Key(GlobalContext.KEY_SPACE_ID),
+                new Filter.Value(GlobalContext.getSpaceId())
+        );
+
+        Filter.Expression finalExpression;
+        if (expression != null) {
+            // 组合：(SpaceID == curr) AND (UserExpression)
+            finalExpression = new Filter.Expression(
+                    Filter.ExpressionType.AND,
+                    spaceExpression,
+                    expression
+            );
+        } else {
+            finalExpression = spaceExpression;
+        }
+        vectorStore.delete(finalExpression);
     }
 
     // ========================================================================
@@ -99,34 +144,50 @@ public class RAGDocumentRepository {
     public List<DocumentInfoDTO> findAllDocumentSummaries() {
         final String sql = """
                 SELECT
-                    metadata ->> 'document_id' as document_id,
-                    MAX(metadata ->> 'original_filename') as original_filename,
-                    MAX(metadata ->> 'source_system') as source_system,
+                    metadata ->> 'sourceId' as sourceId,
+                    MAX(metadata ->> 'sourceName') as sourceName,
+                    MAX(metadata ->> 'documentType') as documentType,
+                    MAX(metadata ->> 'sourceSystem') as sourceSystem,
                     COUNT(*) as chunk_count
                 FROM %s
-                WHERE metadata ->> 'document_id' IS NOT NULL
-                GROUP BY metadata ->> 'document_id'
+                WHERE  metadata ->> ? = ?
+                GROUP BY metadata ->> 'sourceId'
                 ORDER BY MAX(created_at) DESC
                 """.formatted(VECTOR_TABLE_NAME);
 
+        // 参数顺序：SpaceKey, SpaceValue
+        Object[] params = new Object[]{GlobalContext.KEY_SPACE_ID, GlobalContext.getSpaceId()};
+
+        log.info("param: {}", Arrays.toString(params));
+
         return jdbcTemplate.query(sql, (rs, rowNum) -> new DocumentInfoDTO(
-                rs.getString("document_id"),
-                rs.getString("original_filename"),
-                rs.getString("source_system"),
-                rs.getLong("chunk_count")
-        ));
+                        rs.getString("sourceId"),
+                        rs.getString("sourceName"),
+                        rs.getString("documentType"),
+                        rs.getString("sourceSystem"),
+                        rs.getLong("chunk_count")
+                )
+                , params
+        );
     }
 
     /**
      * 根据 document_id 获取所有分片详情
      */
-    public List<DocumentChunkDTO> findChunksByDocumentId(String documentId) {
+    public List<DocumentChunkDTO> findChunksByDocumentId(String sourceId) {
         final String sql = """
                 SELECT id, content, metadata
                 FROM %s
-                WHERE metadata ->> 'document_id' = ?
+                WHERE metadata ->> 'sourceId' = ?
+                  AND metadata ->> ? = ?
                 ORDER BY (metadata ->> 'chunk_sequence')::int ASC
                 """.formatted(VECTOR_TABLE_NAME);
+
+        Object[] params = new Object[]{
+                sourceId,
+                GlobalContext.KEY_SPACE_ID,
+                GlobalContext.getSpaceId()
+        };
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
             return new DocumentChunkDTO(
@@ -134,17 +195,22 @@ public class RAGDocumentRepository {
                     rs.getString("content"),
                     parseMetadata(rs.getString("metadata"))
             );
-        }, documentId);
+        }, params);
     }
 
     /**
      * 获取单个分片的元数据
      */
     public Optional<Map<String, Object>> findMetadataByChunkId(String chunkId) {
-        final String sql = "SELECT metadata FROM " + VECTOR_TABLE_NAME + " WHERE id = ?::uuid";
+        final String sql = "SELECT metadata FROM " + VECTOR_TABLE_NAME + " WHERE id = ?::uuid AND metadata ->> ? = ?";
+        Object[] params = new Object[]{
+                chunkId,
+                GlobalContext.KEY_SPACE_ID,
+                GlobalContext.getSpaceId()
+        };
         try {
             Map<String, Object> metadata = jdbcTemplate.queryForObject(sql, (rs, rowNum) ->
-                    parseMetadata(rs.getString("metadata")), chunkId);
+                    parseMetadata(rs.getString("metadata")), params);
             return Optional.ofNullable(metadata);
         } catch (Exception e) {
             return Optional.empty();
@@ -152,34 +218,46 @@ public class RAGDocumentRepository {
     }
 
     /**
-     * 基于 document_id 的物理删除
+     * 基于 sourceId 的物理删除
      */
-    public void deleteByDocumentId(String documentId) {
-        String sql = "DELETE FROM " + VECTOR_TABLE_NAME + " WHERE metadata ->> 'document_id' = ?";
-        jdbcTemplate.update(sql, documentId);
+    public void deleteBySourceId(String sourceId) {
+        String sql = "DELETE FROM " + VECTOR_TABLE_NAME + " WHERE metadata ->> 'sourceId' = ? AND metadata ->> ? = ?";
+        Object[] params = new Object[]{
+                sourceId,
+                GlobalContext.KEY_SPACE_ID,
+                GlobalContext.getSpaceId()
+        };
+        jdbcTemplate.update(sql, params);
     }
 
     /**
      * 动态条件删除 (Metadata 匹配)
      */
     public int deleteByMetadataConditions(Map<String, Object> conditions) {
+        // 如果没有条件，也必须限制在当前 Space 下（相当于清空当前 Space 数据，需谨慎，这里假设 conditions 必须传参）
+        // 如果允许清空 Space，则不需要 isEmpty 检查。这里为了安全保留非空校验，但加上 Space 限制。
         if (CollectionUtils.isEmpty(conditions)) return 0;
 
         StringBuilder sql = new StringBuilder("DELETE FROM " + VECTOR_TABLE_NAME + " WHERE 1=1");
         List<Object> params = new ArrayList<>();
 
+        // 1. 强制添加 Space ID 条件
+        sql.append(" AND metadata ->> ? = ?");
+        params.add(GlobalContext.KEY_SPACE_ID);
+        params.add(GlobalContext.getSpaceId());
+
+        // 2. 添加动态条件
         for (Map.Entry<String, Object> entry : conditions.entrySet()) {
-            // 注意：Key 白名单校验应在 Service 层或此处做更严格处理
+            // 避免重复添加 Space ID (如果 conditions 里也传了)
+            if (entry.getKey().equals(GlobalContext.KEY_SPACE_ID)) {
+                continue;
+            }
             sql.append(" AND metadata ->> ? = ?");
             params.add(entry.getKey());
             params.add(String.valueOf(entry.getValue()));
         }
         return jdbcTemplate.update(sql.toString(), params.toArray());
     }
-
-    // ========================================================================
-    // 3. 辅助方法 (Helpers)
-    // ========================================================================
 
     private Map<String, Object> parseMetadata(String json) {
         try {

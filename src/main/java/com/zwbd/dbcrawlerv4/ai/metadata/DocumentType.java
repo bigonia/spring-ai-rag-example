@@ -9,6 +9,8 @@ public enum DocumentType {
 
     DATABASE,
 
+    DATABASE_STREAM,
+
     MD,
 
     PDF,
