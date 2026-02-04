@@ -1,5 +1,6 @@
 package com.zwbd.dbcrawlerv4.ai.tools;
 
+import com.zwbd.dbcrawlerv4.ai.dto.StreamEvent;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
@@ -10,8 +11,11 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.util.CollectionUtils;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * @Author: wnli
@@ -26,22 +30,59 @@ public class ToolCallingManagerWrap implements ToolCallingManager {
 
     @Override
     public List<ToolDefinition> resolveToolDefinitions(ToolCallingChatOptions chatOptions) {
-        return toolCallingManager.resolveToolDefinitions(chatOptions);
+        List<ToolDefinition> toolDefinitions = toolCallingManager.resolveToolDefinitions(chatOptions);
+        log.info("toolCallingManager resolve toolDefinitions: {}", toolDefinitions);
+        return toolDefinitions;
     }
 
     @Override
     public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse) {
+        Consumer<StreamEvent> consumer = extractConsumer(prompt);
+        long t = System.currentTimeMillis();
         ToolExecutionResult result = toolCallingManager.executeToolCalls(prompt, chatResponse);
-        if (result.conversationHistory().isEmpty()) {
-            return result;
+        long cost = System.currentTimeMillis() - t;
+        List<Message> conversationHistory = result.conversationHistory();
+        if (conversationHistory.get(conversationHistory.size() - 1) instanceof ToolResponseMessage toolResponseMessage) {
+            toolResponseMessage.getResponses().forEach(response -> {
+                if (consumer != null) {
+                    StreamEvent toolEvent = new StreamEvent(
+                            StreamEvent.EventType.TOOL_EXECUTION,
+                            Map.of(
+                                    "toolId", response.id(),
+                                    "toolName", response.name(),
+                                    "toolResult", response.responseData(),
+                                    "toolCost", cost
+                            )
+                    );
+                    consumer.accept(toolEvent);
+                }
+            });
         }
-        Message message = result.conversationHistory().get(result.conversationHistory().size() - 1);
-        ToolResponseMessage toolResponseMessage = (ToolResponseMessage) message;
-        toolResponseMessage.getResponses().forEach(responseMessage -> {
-            String name = responseMessage.name();
-            String data = responseMessage.responseData();
-            log.info("executeToolCalls name: {}, data: {}", name, data);
-        });
         return result;
     }
+
+    /**
+     * 核心逻辑：从 Prompt 中提取 Conversation ID
+     * 上层调用时需使用: chatClient.prompt().toolContext(Map.of("conversationId", "xxx")).call()
+     */
+    private String extractConversationId(Prompt prompt) {
+        if (prompt.getOptions() instanceof ToolCallingChatOptions options) {
+            Map<String, Object> context = options.getToolContext();
+            if (!CollectionUtils.isEmpty(context) && context.containsKey("conversationId")) {
+                return String.valueOf(context.get("conversationId"));
+            }
+        }
+        return "unknown"; // 或者 null
+    }
+
+    private Consumer<StreamEvent> extractConsumer(Prompt prompt) {
+        if (prompt.getOptions() instanceof ToolCallingChatOptions options) {
+            Map<String, Object> context = options.getToolContext();
+            if (!CollectionUtils.isEmpty(context) && context.containsKey("TOOL_LOG_CONSUMER")) {
+                return (Consumer<StreamEvent>) context.get("TOOL_LOG_CONSUMER");
+            }
+        }
+        return null;
+    }
+
 }

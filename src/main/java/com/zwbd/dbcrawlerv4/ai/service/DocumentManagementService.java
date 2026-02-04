@@ -1,16 +1,19 @@
 package com.zwbd.dbcrawlerv4.ai.service;
 
-import com.zwbd.dbcrawlerv4.ai.dto.DocumentChunkDTO;
-import com.zwbd.dbcrawlerv4.ai.dto.DocumentInfoDTO;
-import com.zwbd.dbcrawlerv4.ai.metadata.BaseMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.DocumentChunkDTO;
+import com.zwbd.dbcrawlerv4.ai.dto.document.DocumentInfoDTO;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.BaseMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
 import com.zwbd.dbcrawlerv4.ai.repository.RAGDocumentRepository;
 import com.zwbd.dbcrawlerv4.common.web.ApiResponse;
+import com.zwbd.dbcrawlerv4.document.entity.DocumentContext;
 import com.zwbd.dbcrawlerv4.document.entity.DomainDocument;
 import com.zwbd.dbcrawlerv4.document.etl.loader.DocumentLoader;
+import com.zwbd.dbcrawlerv4.document.service.DocumentContextService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -31,7 +34,11 @@ public class DocumentManagementService {
 
     private final RAGDocumentRepository documentRepository;
     private final Map<DocumentType, DocumentLoader> documentLoaders;
-    private final TokenTextSplitter textSplitter = new TokenTextSplitter();
+//    private final TokenTextSplitter textSplitter = new  TokenTextSplitter();
+    private final TokenTextSplitter textSplitter = new  TokenTextSplitter(800, 350, 1, 10000, true);
+
+    @Autowired
+    private DocumentContextService documentContextService;
 
     public DocumentManagementService(RAGDocumentRepository documentRepository,
                                      List<DocumentLoader> loaderImplementations) {
@@ -49,7 +56,15 @@ public class DocumentManagementService {
     @Transactional
     public List<Document> ingest(DomainDocument domainDocument) {
         log.info("Starting ingestion domainDocument {}", domainDocument.getId());
-        List<Document> chunks = textSplitter.split(domainDocument.getDocument());
+        List<DocumentContext> documentContent = documentContextService.getDocumentContents(domainDocument.getId());
+        List<Document> documents = documentContent.stream().map(documentContext -> {
+            return new Document(documentContext.getText(), documentContext.getMetadata());
+        }).toList();
+        log.info("ingest domainDocument {} size: {}", domainDocument.getId(), documents.size());
+//        documents.forEach(item-> System.out.println(item.getText()));
+        List<Document> chunks = textSplitter.split(documents);
+        log.info("splitting chunks size {}", chunks.size());
+//        chunks.forEach(item-> System.out.println(item.getText()));
         documentRepository.save(chunks);
         return chunks;
     }

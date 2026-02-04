@@ -124,14 +124,14 @@ public class KnowledgeFileController {
      * @return 状态响应
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteFile(@PathVariable("id") Long fileId) {
+    public ApiResponse<String> deleteFile(@PathVariable("id") Long fileId) {
         try {
             knowledgeFileService.deleteFile(fileId);
-            return ResponseEntity.ok("文件 (ID: " + fileId + ") 已被成功删除。");
+            return ApiResponse.ok("文件 (ID: " + fileId + ") 已被成功删除。");
         } catch (RuntimeException e) {
             // 捕获 "File not found"
             log.warn("删除文件失败 (ID: {}): {}", fileId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+            return ApiResponse.error(e.getMessage());
         }
     }
 

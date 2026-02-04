@@ -1,7 +1,7 @@
 package com.zwbd.dbcrawlerv4.ai.config;
 
-import com.zwbd.dbcrawlerv4.document.etl.processor.DatabaseMetaDataProcessor;
 import com.zwbd.dbcrawlerv4.ai.tools.CommonTools;
+import com.zwbd.dbcrawlerv4.document.etl.processor.DatabaseMetaDataProcessor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -63,13 +63,6 @@ public class ChatClientConfig implements InitializingBean {
         return ragSystemPromptTemplate;
     }
 
-    @Bean
-    public ChatMemory chatMemory() {
-        return MessageWindowChatMemory.builder()
-                .chatMemoryRepository(chatMemoryRepository)
-                .maxMessages(20)
-                .build();
-    }
 
     @Bean("pythonCoder")
     public ChatClient initCommonChatClient(@Qualifier("deepseekChatModel") ChatModel model) {
@@ -96,8 +89,46 @@ public class ChatClientConfig implements InitializingBean {
 //                        "       - 不要创建线程。\n" +
 //                        "       - 仅使用 Python 标准库（如 `json`, `re`）。")
                 .build();
-        return  customChatClient;
+        return customChatClient;
     }
+
+    @Bean
+    public ChatMemory chatMemory() {
+        return MessageWindowChatMemory.builder()
+                .chatMemoryRepository(chatMemoryRepository)
+                .maxMessages(20)
+                .build();
+    }
+
+    @Bean("ragAdvisor-nullable")
+    public Advisor initRagAdvisor() {
+        Advisor retrievalAugmentationAdvisor = RetrievalAugmentationAdvisor.builder()
+
+                .queryExpander(MultiQueryExpander.builder()
+                        .chatClientBuilder(builder.build().mutate())
+                        .numberOfQueries(2)
+                        .includeOriginal(true)
+                        .build())
+                .queryTransformers(RewriteQueryTransformer.builder()
+                        .chatClientBuilder(builder.build().mutate())
+                        .build())
+                .documentRetriever(VectorStoreDocumentRetriever.builder()
+                        .similarityThreshold(0.50)
+                        .vectorStore(vectorStore)
+                        .build())
+                .queryAugmenter(ContextualQueryAugmenter.builder()
+                        .allowEmptyContext(true)
+                        .build())
+                .build();
+        retrievalAugmentationAdvisor.getOrder();
+        return retrievalAugmentationAdvisor;
+    }
+
+    @Bean("memoryAdvisor")
+    public Advisor initChatMemoryAdvisor(ChatMemory chatMemory) {
+        return MessageChatMemoryAdvisor.builder(chatMemory).build();
+    }
+
 
     @Bean
     public ChatClient ragClient(ChatMemory chatMemory) {
@@ -124,8 +155,10 @@ public class ChatClientConfig implements InitializingBean {
                 .build();
 
         ChatClient chatClient = builder.defaultAdvisors(
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(), // chat-memory advisor
-                        retrievalAugmentationAdvisor)
+                        // chat-memory advisor
+                        MessageChatMemoryAdvisor.builder(chatMemory).build()
+                        , retrievalAugmentationAdvisor
+                )
 //                .defaultOptions(
 //                        ToolCallingChatOptions.builder()
 //                                .toolCallbacks(toolCallbackProvider.getToolCallbacks())
@@ -158,6 +191,51 @@ public class ChatClientConfig implements InitializingBean {
 //        return new ToolCallingManagerWrap(defaultToolCallingManager);
 //    }
 
+//    @Bean
+//    @Primary
+//    ToolCallingManager toolCallingManager(ToolCallbackResolver toolCallbackResolver,
+//                                          ToolExecutionExceptionProcessor toolExecutionExceptionProcessor,
+//                                          ObjectProvider<ObservationRegistry> observationRegistry,
+//                                          ObjectProvider<ToolCallingObservationConvention> observationConvention) {
+//        var toolCallingManager = ToolCallingManager.builder()
+//                .observationRegistry(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP))
+//                .toolCallbackResolver(toolCallbackResolver)
+//                .toolExecutionExceptionProcessor(toolExecutionExceptionProcessor)
+//                .build();
+//
+//        observationConvention.ifAvailable(toolCallingManager::setObservationConvention);
+//
+//        return new ToolCallingManagerWrap(toolCallingManager);
+//    }
+
+    /**
+     * 覆盖官方的 OpenAiChatModel 定义。
+     */
+//    @Bean
+//    @Primary
+//    public OpenAiChatModel openAiChatModel(OpenAiApi openAiApi, OpenAiChatProperties chatProperties,
+//                                           ToolCallingManager toolCallingManager, RetryTemplate retryTemplate,
+//                                           ObjectProvider<ObservationRegistry> observationRegistry,
+//                                           ObjectProvider<ChatModelObservationConvention> observationConvention,
+//                                           ObjectProvider<ToolExecutionEligibilityPredicate> openAiToolExecutionEligibilityPredicate) {
+//
+//        log.info("Creating OpenAiChatModel , ToolCallingManager is {}", toolCallingManager instanceof ToolCallingManagerWrap);
+//
+//        // 1. 显式构建 Model，传入你的 Wrapper
+//        var chatModel = OpenAiChatModel.builder()
+//                .openAiApi(openAiApi)
+//                .defaultOptions(chatProperties.getOptions())
+//                .toolCallingManager(toolCallingManager)
+//                .toolExecutionEligibilityPredicate(
+//                        openAiToolExecutionEligibilityPredicate.getIfUnique(DefaultToolExecutionEligibilityPredicate::new))
+//                .retryTemplate(retryTemplate)
+//                .observationRegistry(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP))
+//                .build();
+//
+//        observationConvention.ifAvailable(chatModel::setObservationConvention);
+//
+//        return chatModel;
+//    }
     @Override
     public void afterPropertiesSet() throws Exception {
 

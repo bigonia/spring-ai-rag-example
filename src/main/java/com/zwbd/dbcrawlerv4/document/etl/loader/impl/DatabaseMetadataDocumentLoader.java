@@ -1,9 +1,9 @@
 package com.zwbd.dbcrawlerv4.document.etl.loader.impl;
 
 import com.zwbd.dbcrawlerv4.document.etl.loader.DocumentLoader;
-import com.zwbd.dbcrawlerv4.ai.metadata.BaseMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DatabaseRecordMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.BaseMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DatabaseRecordMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
 import com.zwbd.dbcrawlerv4.datasource.dto.database.DataBaseInfoDTO;
 import com.zwbd.dbcrawlerv4.datasource.dto.metadata.DatabaseMetadata;
 import com.zwbd.dbcrawlerv4.datasource.service.DataBaseInfoService;

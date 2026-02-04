@@ -35,7 +35,7 @@ public class ChatClientController {
         return chatClientService.chat(request);
     }
 
-    @PostMapping(value = "/history/{id}")
+    @GetMapping(value = "/history/{id}")
     public List<Message> history(@PathVariable String id) {
         List<Message> historyChat = chatClientService.getHistoryChat(id);
         return historyChat;

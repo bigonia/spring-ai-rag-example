@@ -1,12 +1,11 @@
 package com.zwbd.dbcrawlerv4.document.etl.loader;
 
-import com.zwbd.dbcrawlerv4.ai.metadata.BaseMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.BaseMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
 import org.springframework.ai.document.Document;
 
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * @Author: wnli

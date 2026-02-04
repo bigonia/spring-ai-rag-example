@@ -2,7 +2,7 @@ package com.zwbd.dbcrawlerv4.ai.custom.retriever;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zwbd.dbcrawlerv4.ai.dto.ChatRequest;
-import com.zwbd.dbcrawlerv4.ai.dto.GeneratedQueries;
+import com.zwbd.dbcrawlerv4.ai.custom.GeneratedQueries;
 import com.zwbd.dbcrawlerv4.ai.repository.RAGDocumentRepository;
 import com.zwbd.dbcrawlerv4.datasource.service.DatabaseMetadataStorageService;
 import lombok.extern.slf4j.Slf4j;

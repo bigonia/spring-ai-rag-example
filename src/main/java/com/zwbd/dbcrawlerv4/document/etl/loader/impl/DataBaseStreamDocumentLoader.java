@@ -1,9 +1,9 @@
 package com.zwbd.dbcrawlerv4.document.etl.loader.impl;
 
 import com.zwbd.dbcrawlerv4.document.etl.loader.DocumentLoader;
-import com.zwbd.dbcrawlerv4.ai.metadata.BaseMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DatabaseRecordMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.BaseMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DatabaseRecordMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
 import com.zwbd.dbcrawlerv4.datasource.dialect.DataStreamContext;
 import com.zwbd.dbcrawlerv4.datasource.entity.DataBaseInfo;
 import com.zwbd.dbcrawlerv4.datasource.service.DataBaseInfoService;
@@ -37,7 +37,8 @@ public class DataBaseStreamDocumentLoader implements DocumentLoader {
                      metadataCollectorService.openDataStream(
                              info, databaseRecordMetadata.getSchema(), databaseRecordMetadata.getTable(), databaseRecordMetadata.getTemplate())
         ) {
-            return context.getStream().limit(10).map(doc -> new Document(doc,metadata.toMap())).toList();
+//            return context.getStream().limit(10).map(doc -> new Document(doc,metadata.toMap())).toList();
+            return context.getStream().map(doc -> new Document(doc,metadata.toMap())).toList();
         }
     }
 

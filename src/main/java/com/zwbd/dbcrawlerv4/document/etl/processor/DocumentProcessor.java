@@ -1,7 +1,6 @@
 package com.zwbd.dbcrawlerv4.document.etl.processor;
 
-import com.zwbd.dbcrawlerv4.document.entity.DomainDocument;
-import org.springframework.ai.document.Document;
+import com.zwbd.dbcrawlerv4.document.entity.DocumentContext;
 
 import java.util.List;
 
@@ -15,9 +14,10 @@ import java.util.List;
 public interface DocumentProcessor {
     /**
      * 处理单个文档
+     *
      * @param document 输入文档
      * @return 处理后的文档列表 (返回空列表则过滤，返回多个元素则拆分)
      */
-    List<DomainDocument.DocumentContext> process(DomainDocument.DocumentContext document);
+    List<DocumentContext> process(DocumentContext document);
 
 }

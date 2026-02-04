@@ -1,6 +1,7 @@
 package com.zwbd.dbcrawlerv4.document.etl.processor;
 
-import com.zwbd.dbcrawlerv4.document.entity.DomainDocument;
+import com.zwbd.dbcrawlerv4.document.entity.DocumentContext;
+import lombok.extern.slf4j.Slf4j;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.PolyglotException;
@@ -16,6 +17,7 @@ import java.util.List;
  * @Date: 2025/12/3 9:38
  * @Desc:
  */
+@Slf4j
 public class PythonScriptProcessor implements DocumentProcessor, AutoCloseable {
 
     private final String userScript;
@@ -47,7 +49,7 @@ public class PythonScriptProcessor implements DocumentProcessor, AutoCloseable {
     }
 
     @Override
-    public List<DomainDocument.DocumentContext> process(DomainDocument.DocumentContext document) {
+    public List<DocumentContext> process(DocumentContext document) {
         synchronized (this) {
             try {
                 // 3. 执行 Python 函数
@@ -60,13 +62,13 @@ public class PythonScriptProcessor implements DocumentProcessor, AutoCloseable {
 
                 // 如果返回的是列表 (支持一对多拆分)
                 if (result.hasArrayElements()) {
-                    List<DomainDocument.DocumentContext> docs = new ArrayList<>();
+                    List<DocumentContext> docs = new ArrayList<>();
                     for (int i = 0; i < result.getArraySize(); i++) {
                         // 假设列表元素都是 Document 类型
                         // 在实际生产中可能需要更严格的类型检查或转换
                         Value item = result.getArrayElement(i);
                         // GraalVM Host Access 允许直接转换回 Java 对象
-                        docs.add(item.as(DomainDocument.DocumentContext.class));
+                        docs.add(item.as(DocumentContext.class));
                     }
                     return docs;
                 }
@@ -75,9 +77,9 @@ public class PythonScriptProcessor implements DocumentProcessor, AutoCloseable {
                 return Collections.singletonList(document);
 
             } catch (PolyglotException e) {
-                System.err.println("Script execution error: " + e.getMessage());
+                log.error("Script execution error: ", e);
                 // 降级策略：出错则返回原文档，或者根据配置抛出异常
-                return Collections.singletonList(document);
+                throw e;
             }
         }
     }

@@ -1,4 +1,4 @@
-package com.zwbd.dbcrawlerv4.ai.dto;
+package com.zwbd.dbcrawlerv4.ai.custom;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;

@@ -1,4 +1,4 @@
-package com.zwbd.dbcrawlerv4.ai.metadata;
+package com.zwbd.dbcrawlerv4.ai.dto.document.metadata;
 
 /**
  * @Author: wnli

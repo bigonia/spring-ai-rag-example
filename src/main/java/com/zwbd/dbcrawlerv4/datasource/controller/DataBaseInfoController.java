@@ -1,7 +1,7 @@
 package com.zwbd.dbcrawlerv4.datasource.controller;
 
-import com.zwbd.dbcrawlerv4.ai.metadata.DatabaseRecordMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DatabaseRecordMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
 import com.zwbd.dbcrawlerv4.common.web.ApiResponse;
 import com.zwbd.dbcrawlerv4.datasource.dto.database.DataBaseInfoDTO;
 import com.zwbd.dbcrawlerv4.datasource.service.DataBaseInfoService;

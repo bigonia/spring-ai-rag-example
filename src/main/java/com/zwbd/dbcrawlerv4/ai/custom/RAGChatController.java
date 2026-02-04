@@ -1,7 +1,6 @@
 package com.zwbd.dbcrawlerv4.ai.custom;
 
 import com.zwbd.dbcrawlerv4.ai.dto.ChatRequest;
-import com.zwbd.dbcrawlerv4.ai.dto.LocalChatResponse;
 import com.zwbd.dbcrawlerv4.ai.dto.StreamEvent;
 import com.zwbd.dbcrawlerv4.ai.custom.service.ConversationService2;
 import io.swagger.v3.oas.annotations.Operation;

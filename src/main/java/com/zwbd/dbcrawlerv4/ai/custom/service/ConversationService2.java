@@ -1,8 +1,8 @@
 package com.zwbd.dbcrawlerv4.ai.custom.service;
 
 import com.zwbd.dbcrawlerv4.ai.dto.ChatRequest;
-import com.zwbd.dbcrawlerv4.ai.dto.DocumentChunkDTO;
-import com.zwbd.dbcrawlerv4.ai.dto.LocalChatResponse;
+import com.zwbd.dbcrawlerv4.ai.dto.document.DocumentChunkDTO;
+import com.zwbd.dbcrawlerv4.ai.custom.LocalChatResponse;
 import com.zwbd.dbcrawlerv4.ai.dto.StreamEvent;
 import com.zwbd.dbcrawlerv4.ai.custom.retriever.DocumentRetriever;
 import lombok.extern.slf4j.Slf4j;

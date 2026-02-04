@@ -2,8 +2,8 @@ package com.zwbd.dbcrawlerv4.ai.repository;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zwbd.dbcrawlerv4.ai.dto.DocumentChunkDTO;
-import com.zwbd.dbcrawlerv4.ai.dto.DocumentInfoDTO;
+import com.zwbd.dbcrawlerv4.ai.dto.document.DocumentChunkDTO;
+import com.zwbd.dbcrawlerv4.ai.dto.document.DocumentInfoDTO;
 import com.zwbd.dbcrawlerv4.ai.dto.RAGFilter;
 import com.zwbd.dbcrawlerv4.common.web.GlobalContext;
 import lombok.extern.slf4j.Slf4j;
@@ -52,7 +52,7 @@ public class RAGDocumentRepository {
     public void save(List<Document> documents) {
         Assert.notEmpty(documents, "Documents list must not be empty");
         int totalSize = documents.size();
-
+        log.info("save documents size: {}", totalSize);
         // 1. 注入业务空间 ID
         String spaceId = GlobalContext.getSpaceId();
         String spaceKey = GlobalContext.KEY_SPACE_ID;

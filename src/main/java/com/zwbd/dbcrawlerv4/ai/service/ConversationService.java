@@ -16,7 +16,7 @@ import java.util.UUID;
 /**
  * @Author: wnli
  * @Date: 2025/11/24 16:33
- * @Desc:
+ * @Desc: 用户对话信息管理
  */
 @Slf4j
 @Service

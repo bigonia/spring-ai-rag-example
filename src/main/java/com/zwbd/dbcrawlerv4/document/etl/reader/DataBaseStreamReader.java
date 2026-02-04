@@ -1,12 +1,12 @@
 package com.zwbd.dbcrawlerv4.document.etl.reader;
 
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
 import com.zwbd.dbcrawlerv4.datasource.dialect.DataStreamContext;
 import com.zwbd.dbcrawlerv4.datasource.entity.DataBaseInfo;
 import com.zwbd.dbcrawlerv4.datasource.service.DataBaseInfoService;
 import com.zwbd.dbcrawlerv4.datasource.service.MetadataCollectorService;
+import com.zwbd.dbcrawlerv4.document.entity.DocumentContext;
 import com.zwbd.dbcrawlerv4.document.entity.DomainDocument;
-import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -28,7 +28,7 @@ public class DataBaseStreamReader implements DomainDocumentReader {
     private MetadataCollectorService metadataCollectorService;
 
     @Override
-    public Stream<DomainDocument.DocumentContext> openContentStream(DomainDocument domainDoc) {
+    public Stream<DocumentContext> openContentStream(DomainDocument domainDoc) {
         DataBaseInfo info = dataBaseInfoService.findById(Long.parseLong(domainDoc.getSourceId())).get().toEntityWithId();
         try (DataStreamContext<String> context =
                      metadataCollectorService.openDataStream(
@@ -37,7 +37,7 @@ public class DataBaseStreamReader implements DomainDocumentReader {
                              domainDoc.getMetadata().get("template").toString()
                      );
         ) {
-            return context.getStream().map(doc -> new DomainDocument.DocumentContext(doc, domainDoc.getMetadata()));
+            return context.getStream().map(doc -> new DocumentContext(doc, domainDoc.getMetadata()));
         }
     }
 

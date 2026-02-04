@@ -1,8 +1,8 @@
 package com.zwbd.dbcrawlerv4.ai.web.controller;
 
-import com.zwbd.dbcrawlerv4.ai.dto.DocumentChunkDTO;
-import com.zwbd.dbcrawlerv4.ai.dto.DocumentInfoDTO;
-import com.zwbd.dbcrawlerv4.ai.dto.UpdateChunkRequest;
+import com.zwbd.dbcrawlerv4.ai.dto.document.DocumentChunkDTO;
+import com.zwbd.dbcrawlerv4.ai.dto.document.DocumentInfoDTO;
+import com.zwbd.dbcrawlerv4.ai.dto.document.UpdateChunkRequest;
 import com.zwbd.dbcrawlerv4.ai.service.DocumentManagementService;
 import com.zwbd.dbcrawlerv4.common.web.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;

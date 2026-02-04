@@ -1,7 +1,7 @@
 package com.zwbd.dbcrawlerv4.file;
 
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
-import com.zwbd.dbcrawlerv4.ai.metadata.FileUploadMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.FileUploadMetadata;
 import com.zwbd.dbcrawlerv4.ai.service.DocumentManagementService;
 import com.zwbd.dbcrawlerv4.document.service.DomainDocumentService;
 import lombok.AllArgsConstructor;

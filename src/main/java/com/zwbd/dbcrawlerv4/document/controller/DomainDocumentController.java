@@ -3,21 +3,28 @@ package com.zwbd.dbcrawlerv4.document.controller;
 import com.zwbd.dbcrawlerv4.common.web.ApiResponse;
 import com.zwbd.dbcrawlerv4.document.dto.GenerateScriptRequest;
 import com.zwbd.dbcrawlerv4.document.entity.BizAction;
+import com.zwbd.dbcrawlerv4.document.entity.DocumentContext;
 import com.zwbd.dbcrawlerv4.document.entity.DomainDocument;
+import com.zwbd.dbcrawlerv4.document.repository.DomainDocumentRepository;
+import com.zwbd.dbcrawlerv4.document.service.CleaningCopilotService;
+import com.zwbd.dbcrawlerv4.document.service.DocumentContextService;
 import com.zwbd.dbcrawlerv4.document.service.DomainDocumentService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -31,12 +38,16 @@ import static com.zwbd.dbcrawlerv4.common.config.CommonConfig.objectMapper;
  * @Date: 2025/11/25 11:03
  * @Desc:
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/domain-docs")
 public class DomainDocumentController {
 
     @Autowired
     private DomainDocumentService domainDocumentService;
+
+    @Autowired
+    private DocumentContextService documentContextService;
 
     @Autowired
     @Qualifier("pythonCoder")
@@ -57,9 +68,9 @@ public class DomainDocumentController {
         // 如果前端没传采样数据，后端自动去查原始文档获取
         if (contextData == null || contextData.isEmpty()) {
             if (request.getDocId() != null) {
-                try (Stream<DomainDocument.DocumentContext> stream = domainDocumentService.getStream(request.getDocId())) {
+                try (Stream<DocumentContext> stream = domainDocumentService.getStream(request.getDocId())) {
                     // 取前 3 条作为样本
-                    List<DomainDocument.DocumentContext> samples = stream.limit(3).collect(Collectors.toList());
+                    List<DocumentContext> samples = stream.limit(3).collect(Collectors.toList());
                     contextData = objectMapper.writeValueAsString(samples);
                 } catch (Exception e) {
                     contextData = "[无法自动获取采样数据，请手动提供]";
@@ -73,13 +84,13 @@ public class DomainDocumentController {
         String promptText = String.format("""
                 你是一个数据治理专家，精通 Python 和 Java GraalVM 环境。
                 请根据以下数据样本和用户需求，编写一个 Python 清洗脚本。
-                
+                                
                 【数据样本】：
                 %s
-                
+                                
                 【用户需求】：
                 %s
-                
+                                
                 【代码规范与限制】：
                 1. 必须定义函数 `def process(doc):`。
                 2. 输入 `doc` 是 Java DocumentContext 对象，其属性均为 Java 对象：
@@ -95,7 +106,7 @@ public class DomainDocumentController {
                    - 返回 `[doc1, doc2]` 表示拆分。
                 4. 禁止 import 第三方库 (pandas/numpy)，仅使用标准库 (json, re)。
                 5. 直接返回 Python 代码，不要包含 Markdown 代码块标记（如 ```python），不要包含解释性文字，可以包含代码注释。
-                
+                                
                 【Python 代码】：
                 """, contextData, request.getRequirement());
 
@@ -115,10 +126,9 @@ public class DomainDocumentController {
      */
     @GetMapping(value = "/{docId}/stream", produces = MediaType.APPLICATION_NDJSON_VALUE)
     public StreamingResponseBody getDocumentStream(@PathVariable Long docId) {
-
         StreamingResponseBody stream = outputStream -> {
             // 获取业务流 (已包含可能的 Python 清洗装饰器)
-            try (Stream<DomainDocument.DocumentContext> docStream = domainDocumentService.getStream(docId)) {
+            try (Stream<DocumentContext> docStream = domainDocumentService.getStream(docId)) {
                 // 遍历流，逐条写入 Response
                 docStream.forEach(doc -> {
                     try {
@@ -143,15 +153,60 @@ public class DomainDocumentController {
      * 用户在前端编写好 Python 脚本后，调用此接口保存/执行清洗规则。
      */
     @PostMapping("/{parentId}/derive")
-    public ResponseEntity<Long> createDerivedDocument(
+    public ApiResponse createDerivedDocument(
             @PathVariable Long parentId,
             @RequestBody String script) {
-
         // 调用 Service 层的核心分流方法
         // 如果是静态文档，这里会立即执行 ETL；如果是流式文档，这里只保存 Metadata
-        Long derivedId = domainDocumentService.createDerivedDocument(parentId, script);
+        domainDocumentService.createDerivedDocument(parentId, script);
+        return ApiResponse.success();
+    }
 
-        return ResponseEntity.ok(derivedId);
+    @Autowired
+    private CleaningCopilotService cleaningCopilotService;
+
+    @Autowired
+    private DomainDocumentRepository domainDocumentRepository;
+
+    @GetMapping("entity/{id}")
+    public ApiResponse entity(@PathVariable Long id) {
+        log.info("document id: {}", id);
+        cleaningCopilotService.genEntity(id);
+        return ApiResponse.success();
+    }
+
+    @GetMapping("/{docId}/export/excel")
+    public void downloadExcel(@PathVariable Long docId, HttpServletResponse response) {
+        try {
+            // 1. 设置响应头 (Controller 的职责)
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("数据清洗结果_" + docId, "UTF-8").replaceAll("\\+", "%20");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+            // 2. 调用 Service，传入 Response 的输出流
+            domainDocumentService.exportToExcel(docId, response.getOutputStream());
+        } catch (IOException e) {
+            // 异常处理
+            response.setStatus(500);
+        }
+    }
+
+    /**
+     * 下载 SQL 脚本
+     * 用法: GET /api/documents/101/export/sql?tableName=order_deal_result&pkKey=sourceId
+     * * @param tableName 目标表名 (如 order_deal_result)
+     * @param pkKey 元数据中作为主键的 Key (根据你的样例数据，应该是 "sourceId")
+     */
+    @GetMapping("/{docId}/export/sql")
+    public void downloadSql(@PathVariable Long docId,
+                            @RequestParam String tableName,
+                            @RequestParam(defaultValue = "sourceId") String pkKey,
+                            HttpServletResponse response) {
+        try {
+            domainDocumentService.exportToSql(docId, tableName, pkKey, response);
+        } catch (IOException e) {
+            response.setStatus(500);
+        }
     }
 
     @GetMapping("vector/{id}")
@@ -165,8 +220,13 @@ public class DomainDocumentController {
         return ApiResponse.success(domainDocumentService.getDomainDocument(id));
     }
 
+    @GetMapping("/{id}/context")
+    public ApiResponse<Page<DocumentContext>> getDocumentContext(@PathVariable Long id, @RequestParam int page, @RequestParam int size) {
+        return ApiResponse.success(documentContextService.getDocumentContentPage(id, page, size));
+    }
+
     @GetMapping("/{id}/stream")
-    public ApiResponse<Stream<DomainDocument.DocumentContext>> getStream(@PathVariable Long id) {
+    public ApiResponse<Stream<DocumentContext>> getStream(@PathVariable Long id) {
         return ApiResponse.success(domainDocumentService.getStream(id));
     }
 
@@ -208,11 +268,11 @@ public class DomainDocumentController {
     /**
      * 手动更新清洗结果 (对应 Processor 完成)
      */
-    @PutMapping("/{id}/complete")
-    public ApiResponse completeProcessing(@PathVariable Long id, @RequestBody UpdateContentRequest request) {
-        domainDocumentService.completeProcessing(id, request.getContentList(), request.getMetadata());
-        return ApiResponse.success();
-    }
+//    @PutMapping("/{id}/complete")
+//    public ApiResponse completeProcessing(@PathVariable Long id, @RequestBody UpdateContentRequest request) {
+//        domainDocumentService.completeProcessing(id, request.getContentList(), request.getMetadata());
+//        return ApiResponse.success();
+//    }
 
 
     // --- DTOs ---

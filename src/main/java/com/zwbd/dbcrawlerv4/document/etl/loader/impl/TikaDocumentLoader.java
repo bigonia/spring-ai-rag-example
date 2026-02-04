@@ -1,9 +1,9 @@
 package com.zwbd.dbcrawlerv4.document.etl.loader.impl;
 
 import com.zwbd.dbcrawlerv4.document.etl.loader.DocumentLoader;
-import com.zwbd.dbcrawlerv4.ai.metadata.BaseMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
-import com.zwbd.dbcrawlerv4.ai.metadata.FileUploadMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.BaseMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.FileUploadMetadata;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.beans.factory.annotation.Autowired;

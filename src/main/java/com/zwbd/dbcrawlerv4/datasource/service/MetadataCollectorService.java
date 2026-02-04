@@ -75,14 +75,14 @@ public class MetadataCollectorService {
         }
     }
 
-    public DataStreamContext<Map<String, Object>> openDataStream(DataBaseInfo dbInfo, String schema, String tableName) {
+    private DataStreamContext<Map<String, Object>> openDataStream(DataBaseInfo dbInfo, String schema, String tableName) {
         DatabaseSession session = dialectFactory.openSession(dbInfo);
         Connection connection = null;
         try {
             connection = session.getDataSource().getConnection();
             Stream<Map<String, Object>> stream = session.getDialect().streamTableData(connection, schema, tableName);
             return new DataStreamContext<>(stream, () -> {
-                System.out.println("Stream consumed. Closing connection.");
+//                System.out.println("Stream consumed. Closing connection.");
 //                finalConnection.close();
             });
         } catch (Exception e) {

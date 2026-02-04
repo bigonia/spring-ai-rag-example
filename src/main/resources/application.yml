@@ -8,7 +8,7 @@ spring:
     allow-bean-definition-overriding: true # 允许Bean定义覆盖
   datasource:
     # PostgreSQL JDBC 连接 URL
-    url: jdbc:postgresql://localhost:5432/rag_db
+    url: jdbc:postgresql://localhost:5432/rag_db?reWriteBatchedInserts=true
     username: postgres
     password: root
     driver-class-name: org.postgresql.Driver
@@ -57,6 +57,12 @@ spring:
                 - /c
                 - npx
                 - "@playwright/mcp@latest"
+        sse:
+          connections:
+            visualization-server:
+#              url: "http://localhost:3000"
+#              url: "https://www.wavelets.cn/visual"
+              url: "https://www.wavelets.cn/"
 
     openai:
       base-url: https://dashscope.aliyuncs.com/compatible-mode
@@ -98,8 +104,11 @@ spring:
     properties:
       hibernate:
         tenant_identifier_resolver: com.zwbd.dbcrawlerv4.common.SpaceIdResolver
+        jdbc:
+          batch_size: 500
     hibernate:
       ddl-auto: update
+
 
 
 

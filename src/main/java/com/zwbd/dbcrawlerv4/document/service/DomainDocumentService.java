@@ -1,15 +1,17 @@
 package com.zwbd.dbcrawlerv4.document.service;
 
+import com.alibaba.excel.EasyExcel;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.zwbd.dbcrawlerv4.ai.metadata.BaseMetadata;
-import com.zwbd.dbcrawlerv4.ai.metadata.DocumentType;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.BaseMetadata;
+import com.zwbd.dbcrawlerv4.ai.dto.document.metadata.DocumentType;
 import com.zwbd.dbcrawlerv4.ai.service.DocumentManagementService;
-import com.zwbd.dbcrawlerv4.common.config.CommonConfig;
 import com.zwbd.dbcrawlerv4.document.entity.*;
 import com.zwbd.dbcrawlerv4.document.etl.loader.DocumentLoader;
 import com.zwbd.dbcrawlerv4.document.etl.processor.PythonScriptProcessor;
 import com.zwbd.dbcrawlerv4.document.etl.reader.DomainDocumentReader;
 import com.zwbd.dbcrawlerv4.document.repository.DomainDocumentRepository;
+import com.zwbd.dbcrawlerv4.utils.MapUtil;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,10 +22,11 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static com.zwbd.dbcrawlerv4.common.config.CommonConfig.objectMapper;
@@ -45,6 +48,12 @@ public class DomainDocumentService {
     @Autowired
     private DocumentManagementService documentManagementService;
 
+
+    @Autowired
+    private DocumentContextService documentContextService;
+//    @Autowired
+//    private DomainDocumentSegmentRepository domainDocumentSegmentRepository;
+
     @Autowired
     @Lazy
     private BusinessActionService businessActionService;
@@ -61,7 +70,7 @@ public class DomainDocumentService {
             }
         }
         log.info("Initialized Service with loaders: {}", documentLoaders.keySet());
-        documentReaders = new HashMap<DocumentType, DomainDocumentReader>();
+        documentReaders = new HashMap<>();
         if (readers != null) {
             for (DomainDocumentReader reader : readers) {
                 reader.getSourceType().forEach(type -> documentReaders.put(type, reader));
@@ -94,21 +103,27 @@ public class DomainDocumentService {
         doc.setDocMode(metadata.getDocMode());
         // 记录metadata
         doc.setMetadata(metadata.toMap());
-        // 记录文档内容
-        doc.setDocument(documents);
         doc.setStatus(DomainDocumentStatus.CREATED);
-
+        // 记录文档
         DomainDocument saved = domainDocumentRepository.save(doc);
-        log.info("Initialized DomainDocument id={} for sourceId={}", saved.getId(), metadata.getSourceId());
+
+        // 记录文档内容
+        documentContextService.saveDocuments(saved.getId(), documents);
+        log.info("Initialized DomainDocument id={} for sourceId={} segment size={}", saved.getId(), metadata.getSourceId(),documents.size());
         return saved;
     }
 
-
-    public Stream<DomainDocument.DocumentContext> getStream(Long docId) {
+    /**
+     * 流式文档内容查询
+     *
+     * @param docId
+     * @return
+     */
+    public Stream<DocumentContext> getStream(Long docId) {
         DomainDocument domainDocument = getDomainDocument(docId);
         if (domainDocument.getDocMode().equals(DocMode.VIRTUAL)) {
             DomainDocumentReader reader = documentReaders.get(domainDocument.getDocumentType());
-            Stream<DomainDocument.DocumentContext> baseStream = reader.openContentStream(domainDocument);
+            Stream<DocumentContext> baseStream = reader.openContentStream(domainDocument);
             String pipelineJson = (String) domainDocument.getMetadata().get(META_KEY_PIPELINE);
             //数据清洗
             if (StringUtils.hasText(pipelineJson)) {
@@ -127,8 +142,119 @@ public class DomainDocumentService {
 
             return baseStream;
         } else {
-            return domainDocument.getContentList().stream();
+            return documentContextService.getDocumentContents(docId).stream();
         }
+    }
+
+    /**
+     * 导出 Excel (动态表头)
+     */
+    public void exportToExcel(Long docId, OutputStream outputStream) throws IOException {
+        List<DocumentContext> contexts = documentContextService.getDocumentContents(docId);
+
+        // 1. 数据预处理：扁平化所有 Metadata
+        List<Map<String, Object>> flatDataList = new ArrayList<>();
+        Set<String> allKeys = new LinkedHashSet<>();
+
+        // 优先固定展示的列
+        allKeys.add("id");
+        allKeys.add("content"); // 核心文本内容
+
+        for (DocumentContext ctx : contexts) {
+            Map<String, Object> flatMap = MapUtil.flatten(ctx.getMetadata());
+
+            // 注入核心属性
+            flatMap.put("id", ctx.getId()); // 文档片段ID
+            flatMap.put("content", ctx.getText());
+
+            flatDataList.add(flatMap);
+            allKeys.addAll(flatMap.keySet()); // 收集所有可能的列名
+        }
+
+        // 2. 构建 EasyExcel 需要的动态表头
+        List<List<String>> heads = new ArrayList<>();
+        List<String> sortedKeys = new ArrayList<>(allKeys);
+        for (String key : sortedKeys) {
+            heads.add(Collections.singletonList(key));
+        }
+
+        // 3. 构建数据行
+        List<List<Object>> rows = new ArrayList<>();
+        for (Map<String, Object> data : flatDataList) {
+            List<Object> row = new ArrayList<>();
+            for (String key : sortedKeys) {
+                row.add(data.get(key));
+            }
+            rows.add(row);
+        }
+
+        // 4. 直接写入传入的 outputStream
+        EasyExcel.write(outputStream)
+                .head(heads)
+                .sheet("清洗结果")
+                .doWrite(rows);
+    }
+
+    /**
+     * 导出 SQL 更新脚本
+     * @param tableName 目标数据库表名
+     * @param pkKey 在 metadata 中代表主键的 key (例如 "sourceId")
+     */
+    public void exportToSql(Long docId, String tableName, String pkKey, HttpServletResponse response) throws IOException {
+        List<DocumentContext> contexts = documentContextService.getDocumentContents(docId);
+
+        response.setContentType("application/sql");
+        response.setHeader("Content-Disposition", "attachment; filename=\"update_script_" + docId + ".sql\"");
+        response.setCharacterEncoding("UTF-8");
+
+        try (PrintWriter writer = response.getWriter()) {
+            writer.println("-- SQL Update Script for Document: " + docId);
+            writer.println("-- Target Table: " + tableName);
+            writer.println("START TRANSACTION;");
+
+            for (DocumentContext ctx : contexts) {
+                Map<String, Object> flatMap = MapUtil.flatten(ctx.getMetadata());
+
+                // 获取主键 (从扁平化 map 中取，或者直接从 ctx.getMetadata() 取)
+                Object pkValue = flatMap.get(pkKey);
+                if (pkValue == null) {
+                    writer.println("-- Skip row: Missing Primary Key (" + pkKey + ")");
+                    continue;
+                }
+
+                // 构建 UPDATE 语句
+                // 策略：只更新 '映射后实体' 相关的字段，避免更新无关的 sourceSystem 等元数据
+                List<String> setList = new ArrayList<>();
+
+                // 这里针对你的样例数据做了特殊逻辑：自动识别 extraction 结果
+                // 你也可以改为遍历 flatMap 的所有 key 生成全量 update
+                if (flatMap.containsKey("映射后实体.entity")) {
+                    setList.add(String.format("clean_entity = '%s'", escapeSql(flatMap.get("映射后实体.entity"))));
+                }
+                if (flatMap.containsKey("映射后实体.category")) {
+                    setList.add(String.format("clean_category = '%s'", escapeSql(flatMap.get("映射后实体.category"))));
+                }
+
+                if (!setList.isEmpty()) {
+                    String sets = String.join(", ", setList);
+                    // 假设 PK 是数字，如果是字符串请加单引号
+                    writer.printf("UPDATE %s SET %s WHERE id = %s;%n", tableName, sets, pkValue);
+                }
+            }
+            writer.println("COMMIT;");
+        }
+    }
+
+    private void configureResponse(HttpServletResponse response, String fileName) throws IOException {
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + encodedName);
+    }
+
+    private String escapeSql(Object val) {
+        if (val == null) return "";
+        return val.toString().replace("'", "\\'");
     }
 
     /**
@@ -156,38 +282,36 @@ public class DomainDocumentService {
         // 追加当前脚本 (列表顺序：父级规则在前，当前规则在后)
         pipelines.add(new PipelineConfig(pythonScript));
 
-        //即使是流式文档，目前系统也会写入几条数据用于预览，所以继续进行清洗操作，以便预览效果
-        try (PythonScriptProcessor processor = new PythonScriptProcessor(pythonScript)) {
-            List<DomainDocument.DocumentContext> cleanedContent = new ArrayList<>();
-            for (DomainDocument.DocumentContext document : parent.getContentList()) {
-                List<DomainDocument.DocumentContext> results = processor.process(document);
-                cleanedContent.addAll(results);
-            }
-            derived.setContentList(cleanedContent);
-        }
+
         //写入规则
         try {
             derived.getMetadata().put(META_KEY_PIPELINE, objectMapper.writeValueAsString(pipelines));
         } catch (IOException e) {
             throw new RuntimeException("Failed to serialize pipeline", e);
         }
-//        if (parent.getDocMode() == DocMode.MATERIALIZED) {
-//            try (PythonScriptProcessor processor = new PythonScriptProcessor(pythonScript)) {
-//                List<Document> cleanedContent = new ArrayList<>();
-//                for (Document document : parent.getDocument()) {
-//                    List<Document> results = processor.process(document);
-//                    cleanedContent.addAll(results);
-//                }
-//                derived.setDocument(cleanedContent);
-//            }
-//        }
         // 4. 保存并返回
-        return domainDocumentRepository.save(derived).getId();
+        Long id = domainDocumentRepository.save(derived).getId();
+        //即使是流式文档，目前系统也会写入几条数据用于预览，所以继续进行清洗操作，以便预览效果
+        try (PythonScriptProcessor processor = new PythonScriptProcessor(pythonScript)) {
+            List<DocumentContext> cleanedContent = new ArrayList<>();
+            List<DocumentContext> documentContent;
+            if (parent.getDocMode() == DocMode.VIRTUAL) {
+                documentContent = documentContextService.getDocumentContentPage(parentId, 0, 20).getContent();
+            } else {
+                documentContent = documentContextService.getDocumentContents(parentId);
+            }
+            for (DocumentContext document : documentContent) {
+                List<DocumentContext> results = processor.process(document);
+                cleanedContent.addAll(results);
+            }
+            documentContextService.saveDocumentContext(id, cleanedContent);
+        }
+        return id;
     }
 
     private List<PipelineConfig> parsePipelineJson(String pipelineJson) {
         List<PipelineConfig> pipelines = new ArrayList<>();
-        if(StringUtils.hasText(pipelineJson)) {
+        if (StringUtils.hasText(pipelineJson)) {
             try {
                 List<PipelineConfig> parentPipelines = objectMapper.readValue(
                         pipelineJson,
@@ -238,21 +362,21 @@ public class DomainDocumentService {
      * 核心：更新文档内容并标记为 READY
      * 这通常是 ProcessorEngine 处理完毕后的回调
      */
-    @Transactional
-    public void completeProcessing(Long id, List<Document> processedContent, Map<String, Object> newMetadata) {
-        DomainDocument doc = getDomainDocument(id);
-
-        if (processedContent != null) {
-            doc.setDocument(processedContent);
-        }
-        if (newMetadata != null) {
-            doc.getMetadata().putAll(newMetadata);
-        }
-
-        doc.setStatus(DomainDocumentStatus.PROCESSED); // 处理完成
-        domainDocumentRepository.save(doc);
-        log.info("DomainDocument id={} processing completed. Status: READY", id);
-    }
+//    @Transactional
+//    public void completeProcessing(Long id, List<Document> processedContent, Map<String, Object> newMetadata) {
+//        DomainDocument doc = getDomainDocument(id);
+//
+//        if (processedContent != null) {
+//            doc.setDocument(processedContent);
+//        }
+//        if (newMetadata != null) {
+//            doc.getMetadata().putAll(newMetadata);
+//        }
+//
+//        doc.setStatus(DomainDocumentStatus.PROCESSED); // 处理完成
+//        domainDocumentRepository.save(doc);
+//        log.info("DomainDocument id={} processing completed. Status: READY", id);
+//    }
 
     /**
      * 注册/更新下游业务状态
@@ -298,6 +422,7 @@ public class DomainDocumentService {
     @Transactional
     public void deleteDomainDocument(Long id) {
         domainDocumentRepository.deleteById(id);
+        documentContextService.deleteDocumentContext(id);
         log.info("Deleted DomainDocument id={}", id);
     }
 

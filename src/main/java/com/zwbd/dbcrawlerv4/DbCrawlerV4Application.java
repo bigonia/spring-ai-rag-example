@@ -1,13 +1,12 @@
 package com.zwbd.dbcrawlerv4;
 
-import com.zwbd.dbcrawlerv4.ai.config.DynamicAiProvidersProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Environment;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -15,6 +14,7 @@ import java.net.UnknownHostException;
 @Slf4j
 @SpringBootApplication
 @EnableJpaAuditing
+@EnableAsync
 public class DbCrawlerV4Application {
 
     public static void main(String[] args) {

@@ -1,4 +1,4 @@
-package com.zwbd.dbcrawlerv4.ai.dto;
+package com.zwbd.dbcrawlerv4.ai.dto.document;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;

@@ -1,4 +1,4 @@
-package com.zwbd.dbcrawlerv4.ai.dto;
+package com.zwbd.dbcrawlerv4.ai.custom;
 
 import java.util.List;
 

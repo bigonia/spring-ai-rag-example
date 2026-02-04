@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 /**
  * @Author: wnli
  * @Date: 2025/11/24 16:30
- * @Desc:
+ * @Desc: 每个租户的会话实体
  */
 @Data
 @Builder
