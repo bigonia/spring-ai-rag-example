@@ -9,10 +9,10 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.zwbd</groupId>
-    <artifactId>DBCrawlerV4</artifactId>
+    <artifactId>AgentNexus</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>DBCrawlerV4</name>
-    <description>DBCrawlerV4</description>
+    <name>AgentNexus</name>
+    <description>Enterprise Multi-Agent Development Platform</description>
     <url/>
     <licenses>
         <license/>

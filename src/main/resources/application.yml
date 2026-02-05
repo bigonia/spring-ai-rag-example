@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: universal-rag-framework # 应用名称
+    name: agent-nexus # 应用名称
   main:
     allow-bean-definition-overriding: true # 允许Bean定义覆盖
   datasource:

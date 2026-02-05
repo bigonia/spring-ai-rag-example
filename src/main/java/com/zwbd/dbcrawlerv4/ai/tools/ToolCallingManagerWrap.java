@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
@@ -38,6 +39,9 @@ public class ToolCallingManagerWrap implements ToolCallingManager {
     @Override
     public ToolExecutionResult executeToolCalls(Prompt prompt, ChatResponse chatResponse) {
         Consumer<StreamEvent> consumer = extractConsumer(prompt);
+        Usage usage = chatResponse.getMetadata().getUsage();
+        chatResponse.getMetadata().getModel();
+        log.info("token cost {}",usage.getTotalTokens());
         long t = System.currentTimeMillis();
         ToolExecutionResult result = toolCallingManager.executeToolCalls(prompt, chatResponse);
         long cost = System.currentTimeMillis() - t;

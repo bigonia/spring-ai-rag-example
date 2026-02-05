@@ -84,7 +84,6 @@ public class AgentFactory {
         List<ToolCallback> tools = toolManager.getTools(toolNames);
 
         // 4. 获取 Advisors (增强组件)
-        // 注意：需要在 AgentEntity 中补充 getAdvisorNames() 字段，此处假设该方法已存在
         List<String> advisorNames = agentEntity.getAdvisors();
         List<Advisor> advisors = new ArrayList<>();
         if (advisorNames != null && !advisorNames.isEmpty()) {

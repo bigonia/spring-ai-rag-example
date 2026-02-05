@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -49,6 +50,8 @@ public class GlobalToolManager {
 
     public void register(ToolCallback[] tool){
         for (ToolCallback toolCallback : tool) {
+            ToolDefinition toolDefinition = toolCallback.getToolDefinition();
+//            toolCallback.getToolMetadata()
             register(toolCallback);
         }
     }

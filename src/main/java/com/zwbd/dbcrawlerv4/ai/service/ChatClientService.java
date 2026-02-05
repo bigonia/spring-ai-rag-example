@@ -8,6 +8,7 @@ import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -65,6 +67,9 @@ public class ChatClientService {
         // unicast: 单播，onBackpressureBuffer: 防止消息积压
         Sinks.Many<StreamEvent> toolLogSink = Sinks.many().unicast().onBackpressureBuffer();
 
+        // 定义一个变量或通过回调处理 Token
+        AtomicReference<Usage> finalUsage = new AtomicReference<>();
+
         // AI正文事件
         Flux<ChatClientResponse> responseFlux = agentFactory.getAgentClient(agentId)
                 .prompt()
@@ -74,7 +79,25 @@ public class ChatClientService {
                 .toolContext(Map.of(ChatMemory.CONVERSATION_ID, chatRequest.sessionId()))
                 .toolContext(Map.of("TOOL_LOG_CONSUMER", (Consumer<StreamEvent>) toolLogSink::tryEmitNext))
                 .stream()
-                .chatClientResponse();
+                .chatClientResponse()
+                .doOnNext(response -> {
+                    // 1. 获取当前 Chunk 的元数据
+                    Usage usage = response.chatResponse().getMetadata().getUsage();
+
+                    // 2. 只有最后一个数据包通常才包含 Usage 信息
+                    if (usage != null && usage.getTotalTokens() > 0) {
+                        finalUsage.set(usage);
+                        // 在这里执行你的业务逻辑，例如：
+                        System.out.println("检测到 Token 消耗: " + usage.getTotalTokens());
+                        // saveToDatabase(usage, chatRequest.sessionId());
+                    }
+                })
+                .doFinally(signalType -> {
+                    // 3. 流结束后的收尾动作
+                    if (finalUsage.get() != null) {
+                        log.info("会话结束，最终 Token 统计：{}", finalUsage.get());
+                    }
+                });
 
         // SESSION_INFO 事件
         Flux<StreamEvent> sessionInfoStream = Flux.just(
@@ -90,6 +113,11 @@ public class ChatClientService {
         // 转换响应流：从 context 提取文档（仅首次发送 CONTEXT），从 ChatResponse 提取文本
         AtomicBoolean contextSent = new AtomicBoolean(false);
         Flux<StreamEvent> responseEvents = responseFlux.flatMap(chatClientResponse -> {
+
+            Usage usage = chatClientResponse.chatResponse().getMetadata().getUsage();
+            System.out.println("提示词 Token: " + usage.getPromptTokens());
+            System.out.println("生成 Token: " + usage.getCompletionTokens()); // 或 getGenerationTokens()
+            System.out.println("总消耗 Token: " + usage.getTotalTokens());
 
             List<StreamEvent> eventsInThisChunk = new ArrayList<>();
 
